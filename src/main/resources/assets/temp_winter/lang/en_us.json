@@ -1,0 +1,12 @@
+{
+  "temp_winter.cmd.sync_started": "[TempWinter] Weather sync started...",
+  "temp_winter.cmd.sync_busy": "[TempWinter] Weather sync already in progress.",
+  "temp_winter.cmd.city_set": "[TempWinter] City set to '%s', syncing...",
+  "temp_winter.cmd.mode_usage": "[TempWinter] Use: auto | snow | rain | thunder | clear | vanilla",
+  "temp_winter.cmd.mode_set": "[TempWinter] Weather mode set to: %s",
+  "temp_winter.cmd.mode_set_timed": "[TempWinter] Weather mode set to: %s for %s min",
+  "temp_winter.jade.snow_freezing": "Temp: %s°C (Freezing)",
+  "temp_winter.jade.snow_melting": "Temp: %s°C (Melting)",
+  "temp_winter.jade.ice_fragile": "Fragile Ice (may crack)",
+  "temp_winter.jade.ice_solid": "Solid Ice (%s°C)"
+}

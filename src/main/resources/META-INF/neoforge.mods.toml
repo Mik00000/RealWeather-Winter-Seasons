@@ -1,0 +1,32 @@
+modLoader="javafml"
+loaderVersion="[4,)"
+license="MIT"
+
+[[mods]]
+modId="temp_winter"
+version="1.0.0"
+displayName="RealWeather: Winter & Seasons"
+authors="mik"
+logoFile="icon.png"
+description='''Real-world weather & winter atmosphere mod for NeoForge 1.21.1:
+- Syncs precipitation, temperature, wind, rain, and thunderstorms with Open-Meteo (with wttr.in fallback) and IP geolocation.
+- Uneven snowdrifts up to 3 blocks, snow trampling, warm melting, fragile ice, and heat-source clearing (including Create/modded blocks).
+- Compatible with Iris shaders, Serene/Ecliptic Seasons (IRL date sync), Cold Sweat, Tough As Nails, LSO, Homeostatic, Jade, AmbientSounds, Particle Rain, Snow! Real Magic!, and Immersive Weathering.
+- Zero custom blocks or items: safe to add or remove anytime.'''
+
+[[mixins]]
+config="temp_winter.mixins.json"
+
+[[dependencies.temp_winter]]
+modId="neoforge"
+type="required"
+versionRange="[21.1,)"
+ordering="NONE"
+side="BOTH"
+
+[[dependencies.temp_winter]]
+modId="minecraft"
+type="required"
+versionRange="[1.21.1]"
+ordering="NONE"
+side="BOTH"

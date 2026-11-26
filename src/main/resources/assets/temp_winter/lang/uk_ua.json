@@ -1,0 +1,12 @@
+{
+  "temp_winter.cmd.sync_started": "[TempWinter] Синхронізацію погоди запущено...",
+  "temp_winter.cmd.sync_busy": "[TempWinter] Синхронізація погоди вже триває.",
+  "temp_winter.cmd.city_set": "[TempWinter] Місто змінено на '%s', оновлюємо погоду...",
+  "temp_winter.cmd.mode_usage": "[TempWinter] Використання: auto | snow | rain | thunder | clear | vanilla",
+  "temp_winter.cmd.mode_set": "[TempWinter] Режим погоди: %s",
+  "temp_winter.cmd.mode_set_timed": "[TempWinter] Режим погоди: %s на %s хв",
+  "temp_winter.jade.snow_freezing": "Темп.: %s°C (Замерзає)",
+  "temp_winter.jade.snow_melting": "Темп.: %s°C (Тане)",
+  "temp_winter.jade.ice_fragile": "Крихкий лід (може тріснути)",
+  "temp_winter.jade.ice_solid": "Міцний лід (%s°C)"
+}
