@@ -21,6 +21,7 @@ public final class WinterConfig {
     public static final ModConfigSpec.DoubleValue FALLBACK_LATITUDE;
     public static final ModConfigSpec.DoubleValue FALLBACK_LONGITUDE;
     public static final ModConfigSpec.IntValue SYNC_INTERVAL_MINUTES;
+    public static final ModConfigSpec.IntValue WEATHER_TIME_OFFSET_HOURS;
     public static final ModConfigSpec.DoubleValue OVERCAST_FLURRY_INTENSITY;
     public static final ModConfigSpec.DoubleValue FREEZE_TEMPERATURE_C;
     public static final ModConfigSpec.DoubleValue WET_SNOW_MAX_TEMPERATURE_C;
@@ -97,6 +98,9 @@ public final class WinterConfig {
         SYNC_INTERVAL_MINUTES = builder
                 .comment("How often (in minutes) the server polls Open-Meteo for current weather.")
                 .defineInRange("syncIntervalMinutes", 10, 2, 120);
+        WEATHER_TIME_OFFSET_HOURS = builder
+                .comment("Shift weather (and real-time clock if syncRealTime=true) by N hours (-24 = 24h earlier, +24 = 24h forecast, 0 = live).")
+                .defineInRange("weatherTimeOffsetHours", 0, -24, 24);
         OVERCAST_FLURRY_INTENSITY = builder
                 .comment("Light snowfall intensity (0.0-1.0) when real weather is cloudy (>=65% cloud cover) without precipitation.")
                 .defineInRange("overcastFlurryIntensity", 0.25, 0.0, 1.0);

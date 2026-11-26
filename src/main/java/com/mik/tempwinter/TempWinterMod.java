@@ -275,6 +275,19 @@ public class TempWinterMod {
                                                 "vanilla",
                                                 IntegerArgumentType.getInteger(ctx, "minutes")
                                         ))))
+                        .then(Commands.literal("offset")
+                                .then(Commands.argument("hours", IntegerArgumentType.integer(-24, 24))
+                                        .suggests((ctx, builder) -> SharedSuggestionProvider.suggest(
+                                                java.util.List.of("-6", "-3", "0", "3", "6"), builder))
+                                        .executes(ctx -> {
+                                            int hours = IntegerArgumentType.getInteger(ctx, "hours");
+                                            RealWeatherService.setTimeOffsetAndSync(hours);
+                                            ctx.getSource().sendSuccess(
+                                                    () -> Component.translatable("realweather.cmd.offset_set", hours),
+                                                    true
+                                            );
+                                            return 1;
+                                        })))
         );
     }
 

@@ -20,7 +20,10 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 import java.util.Locale;
 import java.util.concurrent.CompletableFuture;
 
@@ -119,6 +122,15 @@ public final class RealWeatherService {
         return forceSync();
     }
 
+    public static boolean setTimeOffsetAndSync(int offsetHours) {
+        int clamped = Math.max(-24, Math.min(24, offsetHours));
+        WinterConfig.WEATHER_TIME_OFFSET_HOURS.set(clamped);
+        WinterConfig.WEATHER_TIME_OFFSET_HOURS.save();
+        overrideMode = "auto";
+        overrideTicksRemaining = -1L;
+        return forceSync();
+    }
+
     public static boolean setOverrideMode(MinecraftServer server, String mode, int durationMinutes) {
         String normalized = mode.toLowerCase(Locale.ROOT);
         if (!normalized.equals("auto") && !normalized.equals("snow") && !normalized.equals("rain")
@@ -196,10 +208,15 @@ public final class RealWeatherService {
         String timer = overrideTicksRemaining > 0
                 ? String.format(Locale.ROOT, " (%dm left)", (overrideTicksRemaining + 1199L) / 1200L)
                 : "";
+        int offset = WinterConfig.WEATHER_TIME_OFFSET_HOURS.get();
+        String offsetStr = offset != 0
+                ? String.format(Locale.ROOT, " (%+dh)", offset)
+                : "";
         return String.format(
                 Locale.ROOT,
-                "[RealWeather] %s | %.1f°C | wind %.1f km/h | %s%s (%.0f%%) | freeze=%s, snowLayers=%s, melt=%s",
+                "[RealWeather] %s%s | %.1f°C | wind %.1f km/h | %s%s (%.0f%%) | freeze=%s, snowLayers=%s, melt=%s",
                 resolvedLabel,
+                offsetStr,
                 currentTempC,
                 currentWindKmh,
                 mode,
@@ -272,7 +289,7 @@ public final class RealWeatherService {
         }
 
         if (WinterConfig.SYNC_REAL_TIME.get() && !isVanillaWeatherMode() && server.getTickCount() % 20 == 0) {
-            LocalTime now = LocalTime.now();
+            LocalTime now = LocalTime.now().plusHours(WinterConfig.WEATHER_TIME_OFFSET_HOURS.get());
             long sec = now.toSecondOfDay();
             long mcTimeOfDay = ((sec - 21600L + 86400L) % 86400L) * 24000L / 86400L;
             ServerLevel overworld = server.overworld();
@@ -355,11 +372,16 @@ public final class RealWeatherService {
 
     private static PendingUpdate fetchFromOpenMeteo(float overcastFlurry, boolean windBoost) {
         try {
-            String url = String.format(
-                    Locale.ROOT,
-                    "https://api.open-meteo.com/v1/forecast?latitude=%.4f&longitude=%.4f&current=temperature_2m,precipitation,rain,snowfall,cloud_cover,weather_code,wind_speed_10m",
-                    resolvedLat, resolvedLon
-            );
+            int offsetHours = WinterConfig.WEATHER_TIME_OFFSET_HOURS.get();
+            String url = offsetHours == 0
+                    ? String.format(
+                            Locale.ROOT,
+                            "https://api.open-meteo.com/v1/forecast?latitude=%.4f&longitude=%.4f&current=temperature_2m,precipitation,rain,snowfall,cloud_cover,weather_code,wind_speed_10m",
+                            resolvedLat, resolvedLon)
+                    : String.format(
+                            Locale.ROOT,
+                            "https://api.open-meteo.com/v1/forecast?latitude=%.4f&longitude=%.4f&current=temperature_2m&hourly=temperature_2m,precipitation,rain,snowfall,cloud_cover,weather_code,wind_speed_10m&past_days=1&forecast_days=2&timezone=auto",
+                            resolvedLat, resolvedLon);
             HttpRequest req = HttpRequest.newBuilder(URI.create(url))
                     .timeout(Duration.ofSeconds(10))
                     .header("User-Agent", "TempWinter-MC/1.0")
@@ -372,25 +394,73 @@ public final class RealWeatherService {
             }
             JsonObject root = GSON.fromJson(resp.body(), JsonObject.class);
             JsonObject cur = root.getAsJsonObject("current");
-            double tempC = cur.has("temperature_2m") ? cur.get("temperature_2m").getAsDouble() : -1.0;
-            double precip = cur.has("precipitation") ? cur.get("precipitation").getAsDouble() : 0.0;
-            double rain = cur.has("rain") ? cur.get("rain").getAsDouble() : 0.0;
-            double snow = cur.has("snowfall") ? cur.get("snowfall").getAsDouble() : 0.0;
-            int clouds = cur.has("cloud_cover") ? cur.get("cloud_cover").getAsInt() : 0;
-            int wmo = cur.has("weather_code") ? cur.get("weather_code").getAsInt() : 0;
-            double windKmh = cur.has("wind_speed_10m") ? cur.get("wind_speed_10m").getAsDouble() : 0.0;
+            double tempC;
+            double precip;
+            double rain;
+            double snow;
+            int clouds;
+            int wmo;
+            double windKmh;
+
+            if (offsetHours != 0 && root.has("hourly") && cur != null && cur.has("time")) {
+                JsonObject hourly = root.getAsJsonObject("hourly");
+                int idx = findShiftedHourIndex(hourly.getAsJsonArray("time"), cur.get("time").getAsString(), offsetHours);
+                if (idx < 0) {
+                    return null;
+                }
+                tempC = getArrDouble(hourly, "temperature_2m", idx, -1.0);
+                precip = getArrDouble(hourly, "precipitation", idx, 0.0);
+                rain = getArrDouble(hourly, "rain", idx, 0.0);
+                snow = getArrDouble(hourly, "snowfall", idx, 0.0);
+                clouds = (int) Math.round(getArrDouble(hourly, "cloud_cover", idx, 0.0));
+                wmo = (int) Math.round(getArrDouble(hourly, "weather_code", idx, 0.0));
+                windKmh = getArrDouble(hourly, "wind_speed_10m", idx, 0.0);
+            } else {
+                tempC = cur.has("temperature_2m") ? cur.get("temperature_2m").getAsDouble() : -1.0;
+                precip = cur.has("precipitation") ? cur.get("precipitation").getAsDouble() : 0.0;
+                rain = cur.has("rain") ? cur.get("rain").getAsDouble() : 0.0;
+                snow = cur.has("snowfall") ? cur.get("snowfall").getAsDouble() : 0.0;
+                clouds = cur.has("cloud_cover") ? cur.get("cloud_cover").getAsInt() : 0;
+                wmo = cur.has("weather_code") ? cur.get("weather_code").getAsInt() : 0;
+                windKmh = cur.has("wind_speed_10m") ? cur.get("wind_speed_10m").getAsDouble() : 0.0;
+            }
 
             boolean thunder = (wmo == 95 || wmo == 96 || wmo == 99);
             boolean drizzleOrFlurryWmo = (wmo >= 51 && wmo <= 57) || wmo == 77 || wmo == 85 || wmo == 86;
             float intensity = computeIntensity(precip, snow, clouds, windKmh, thunder, drizzleOrFlurryWmo, overcastFlurry, windBoost);
             boolean rainOnly = (rain > 0.0 || (wmo >= 51 && wmo <= 67) || (wmo >= 80 && wmo <= 82)) && snow <= 0.0 && wmo != 77 && wmo != 85 && wmo != 86;
-            String label = String.format(Locale.ROOT, "%s [open-meteo] wmo=%d precip=%.2f rain=%.2f snow=%.2f wind=%.1fkm/h clouds=%d%%",
-                    resolvedLabel, wmo, precip, rain, snow, windKmh, clouds);
+            String label = String.format(Locale.ROOT, "%s [open-meteo%s] wmo=%d precip=%.2f rain=%.2f snow=%.2f wind=%.1fkm/h clouds=%d%%",
+                    resolvedLabel, offsetHours != 0 ? String.format(Locale.ROOT, " %+dh", offsetHours) : "", wmo, precip, rain, snow, windKmh, clouds);
             return new PendingUpdate(intensity, tempC, windKmh, rainOnly, thunder, label);
         } catch (Exception e) {
             LOGGER.warn("[TempWinter] Open-Meteo failed ({}), trying fallback API", e.getMessage());
             return null;
         }
+    }
+
+    private static int findShiftedHourIndex(JsonArray times, String currentIso, int offsetHours) {
+        if (times == null || times.isEmpty()) {
+            return -1;
+        }
+        LocalDateTime target = LocalDateTime.parse(currentIso).plusHours(offsetHours).truncatedTo(ChronoUnit.HOURS);
+        String targetStr = target.format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:00"));
+        for (int i = 0; i < times.size(); i++) {
+            if (targetStr.equals(times.get(i).getAsString())) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private static double getArrDouble(JsonObject obj, String key, int idx, double def) {
+        if (!obj.has(key)) {
+            return def;
+        }
+        JsonArray arr = obj.getAsJsonArray(key);
+        if (idx < 0 || idx >= arr.size() || arr.get(idx).isJsonNull()) {
+            return def;
+        }
+        return arr.get(idx).getAsDouble();
     }
 
     private static PendingUpdate fetchFromWttrIn(float overcastFlurry, boolean windBoost) {

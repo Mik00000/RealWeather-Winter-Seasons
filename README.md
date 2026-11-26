@@ -42,6 +42,7 @@ Download ready-to-play `.jar` builds from the **[Releases](../../releases/latest
 - `/realweather sync` — Trigger an immediate weather fetch.
 - `/realweather city <name|auto>` — Switch city and sync immediately.
 - `/realweather mode <auto|snow|rain|thunder|clear|vanilla> [minutes]` — Override weather (optionally with an auto-expiring timer).
+- `/realweather offset <hours>` — Shift synced weather (and IRL clock if enabled) by `-24..+24` hours (`0` = live).
 - `/realweather vanilla [minutes]` — Temporarily restore vanilla Minecraft weather.
 
 ## Mod Compatibility

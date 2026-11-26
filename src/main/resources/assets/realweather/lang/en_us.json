@@ -5,6 +5,7 @@
   "realweather.cmd.mode_usage": "[RealWeather] Use: auto | snow | rain | thunder | clear | vanilla",
   "realweather.cmd.mode_set": "[RealWeather] Weather mode set to: %s",
   "realweather.cmd.mode_set_timed": "[RealWeather] Weather mode set to: %s for %s min",
+  "realweather.cmd.offset_set": "[RealWeather] Weather time offset set to %sh, syncing...",
   "realweather.jade.snow_freezing": "Temp: %s°C (Freezing)",
   "realweather.jade.snow_melting": "Temp: %s°C (Melting)",
   "realweather.jade.ice_fragile": "Fragile Ice (may crack)",
