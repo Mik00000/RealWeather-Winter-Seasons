@@ -3,7 +3,7 @@ loaderVersion="[4,)"
 license="MIT"
 
 [[mods]]
-modId="temp_winter"
+modId="realweather"
 version="1.0.0"
 displayName="RealWeather: Winter & Seasons"
 authors="mik"
@@ -15,16 +15,16 @@ description='''Real-world weather & winter atmosphere mod for NeoForge 1.21.1:
 - Zero custom blocks or items: safe to add or remove anytime.'''
 
 [[mixins]]
-config="temp_winter.mixins.json"
+config="realweather.mixins.json"
 
-[[dependencies.temp_winter]]
+[[dependencies.realweather]]
 modId="neoforge"
 type="required"
 versionRange="[21.1,)"
 ordering="NONE"
 side="BOTH"
 
-[[dependencies.temp_winter]]
+[[dependencies.realweather]]
 modId="minecraft"
 type="required"
 versionRange="[1.21.1]"

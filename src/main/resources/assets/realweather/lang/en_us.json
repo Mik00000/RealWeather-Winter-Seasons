@@ -1,0 +1,12 @@
+{
+  "realweather.cmd.sync_started": "[RealWeather] Weather sync started...",
+  "realweather.cmd.sync_busy": "[RealWeather] Weather sync already in progress.",
+  "realweather.cmd.city_set": "[RealWeather] City set to '%s', syncing...",
+  "realweather.cmd.mode_usage": "[RealWeather] Use: auto | snow | rain | thunder | clear | vanilla",
+  "realweather.cmd.mode_set": "[RealWeather] Weather mode set to: %s",
+  "realweather.cmd.mode_set_timed": "[RealWeather] Weather mode set to: %s for %s min",
+  "realweather.jade.snow_freezing": "Temp: %s°C (Freezing)",
+  "realweather.jade.snow_melting": "Temp: %s°C (Melting)",
+  "realweather.jade.ice_fragile": "Fragile Ice (may crack)",
+  "realweather.jade.ice_solid": "Solid Ice (%s°C)"
+}

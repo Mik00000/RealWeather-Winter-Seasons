@@ -2,7 +2,7 @@
   <img src="src/main/resources/icon.png" alt="RealWeather: Winter & Seasons" width="96" />
 </p>
 
-# RealWeather: Winter & Seasons (`temp_winter`)
+# RealWeather: Winter & Seasons (`realweather`)
 
 A lightweight, **zero-block / zero-item** real-world weather and winter atmosphere mod for Minecraft (`NeoForge`, `Forge`, `Fabric`).  
 Safe to drop into existing worlds and safe to remove at any time without corrupting blocks or saves.
@@ -38,11 +38,11 @@ Download ready-to-play `.jar` builds from the **[Releases](../../releases/latest
 
 ## Commands (OP Level 2)
 
-- `/tempwinter status` — Show current location, temperature, wind speed, mode, and freeze/melt state.
-- `/tempwinter sync` — Trigger an immediate weather fetch.
-- `/tempwinter city <name|auto>` — Switch city and sync immediately.
-- `/tempwinter mode <auto|snow|rain|thunder|clear|vanilla> [minutes]` — Override weather (optionally with an auto-expiring timer).
-- `/tempwinter vanilla [minutes]` — Temporarily restore vanilla Minecraft weather.
+- `/realweather status` — Show current location, temperature, wind speed, mode, and freeze/melt state.
+- `/realweather sync` — Trigger an immediate weather fetch.
+- `/realweather city <name|auto>` — Switch city and sync immediately.
+- `/realweather mode <auto|snow|rain|thunder|clear|vanilla> [minutes]` — Override weather (optionally with an auto-expiring timer).
+- `/realweather vanilla [minutes]` — Temporarily restore vanilla Minecraft weather.
 
 ## Mod Compatibility
 
@@ -56,8 +56,8 @@ No hard dependencies. Optional runtime compatibility is built in for:
 
 ## Configuration
 
-- **NeoForge / Forge:** `config/temp_winter-common.toml`
-- **Fabric:** `config/temp_winter.json`
+- **NeoForge / Forge:** `config/realweather-common.toml`
+- **Fabric:** `config/realweather.json`
 
 ## License
 

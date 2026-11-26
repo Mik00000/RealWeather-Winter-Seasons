@@ -266,7 +266,7 @@ public final class WinterClientEvents {
         String mode = ClientWeatherState.isRain() ? "RAIN" : (eff <= WinterConfig.FREEZE_TEMPERATURE_C.get() ? "SNOW" : "WET_SNOW");
         event.getRight().add(String.format(
                 Locale.ROOT,
-                "[TempWinter] %.1fC (eff %.1fC) | Wind %.1f km/h | %s",
+                "[RealWeather] %.1fC (eff %.1fC) | Wind %.1f km/h | %s",
                 base, eff, ClientWeatherState.getWindKmh(), mode
         ));
     }

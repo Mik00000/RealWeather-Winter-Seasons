@@ -198,7 +198,7 @@ public final class RealWeatherService {
                 : "";
         return String.format(
                 Locale.ROOT,
-                "[TempWinter] %s | %.1f°C | wind %.1f km/h | %s%s (%.0f%%) | freeze=%s, snowLayers=%s, melt=%s",
+                "[RealWeather] %s | %.1f°C | wind %.1f km/h | %s%s (%.0f%%) | freeze=%s, snowLayers=%s, melt=%s",
                 resolvedLabel,
                 currentTempC,
                 currentWindKmh,

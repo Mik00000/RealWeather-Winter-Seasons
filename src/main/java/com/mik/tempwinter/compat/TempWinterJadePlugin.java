@@ -48,15 +48,15 @@ public class TempWinterJadePlugin implements IWailaPlugin {
                     if (state.is(Blocks.SNOW) && state.hasProperty(SnowLayerBlock.LAYERS)) {
                         boolean melting = effTemp > WinterConfig.FREEZE_TEMPERATURE_C.get();
                         tooltip.add(Component.translatable(
-                                melting ? "temp_winter.jade.snow_melting" : "temp_winter.jade.snow_freezing",
+                                melting ? "realweather.jade.snow_melting" : "realweather.jade.snow_freezing",
                                 tempStr
                         ).withStyle(melting ? ChatFormatting.YELLOW : ChatFormatting.AQUA));
                     } else if (state.is(Blocks.ICE)) {
                         boolean overWater = accessor.getLevel().getBlockState(pos.below()).is(Blocks.WATER);
                         if (overWater && WinterConfig.FRAGILE_ICE.get() && effTemp > WinterConfig.FRAGILE_ICE_MAX_TEMP_C.get()) {
-                            tooltip.add(Component.translatable("temp_winter.jade.ice_fragile").withStyle(ChatFormatting.RED));
+                            tooltip.add(Component.translatable("realweather.jade.ice_fragile").withStyle(ChatFormatting.RED));
                         } else {
-                            tooltip.add(Component.translatable("temp_winter.jade.ice_solid", tempStr).withStyle(ChatFormatting.AQUA));
+                            tooltip.add(Component.translatable("realweather.jade.ice_solid", tempStr).withStyle(ChatFormatting.AQUA));
                         }
                     }
                 } catch (Throwable ignored) {

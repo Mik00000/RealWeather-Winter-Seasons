@@ -52,10 +52,10 @@ import net.neoforged.neoforge.network.registration.PayloadRegistrar;
  */
 @Mod(TempWinterMod.MODID)
 public class TempWinterMod {
-    public static final String MODID = "temp_winter";
+    public static final String MODID = "realweather";
 
     public TempWinterMod(IEventBus modBus, ModContainer container) {
-        container.registerConfig(ModConfig.Type.COMMON, WinterConfig.SPEC, "temp_winter-common.toml");
+        container.registerConfig(ModConfig.Type.COMMON, WinterConfig.SPEC, "realweather-common.toml");
         modBus.addListener(this::registerPayloads);
         NeoForge.EVENT_BUS.addListener(this::onServerStarting);
         NeoForge.EVENT_BUS.addListener(this::onServerStopping);
@@ -218,7 +218,7 @@ public class TempWinterMod {
 
     private void onRegisterCommands(RegisterCommandsEvent event) {
         event.getDispatcher().register(
-                Commands.literal("tempwinter")
+                Commands.literal("realweather")
                         .requires(src -> src.hasPermission(2))
                         .then(Commands.literal("status")
                                 .executes(ctx -> {
@@ -233,8 +233,8 @@ public class TempWinterMod {
                                     boolean started = RealWeatherService.forceSync();
                                     ctx.getSource().sendSuccess(
                                             () -> Component.translatable(started
-                                                    ? "temp_winter.cmd.sync_started"
-                                                    : "temp_winter.cmd.sync_busy"),
+                                                    ? "realweather.cmd.sync_started"
+                                                    : "realweather.cmd.sync_busy"),
                                             true
                                     );
                                     return started ? 1 : 0;
@@ -247,7 +247,7 @@ public class TempWinterMod {
                                             String city = StringArgumentType.getString(ctx, "name").trim();
                                             RealWeatherService.setCityAndSync(city);
                                             ctx.getSource().sendSuccess(
-                                                    () -> Component.translatable("temp_winter.cmd.city_set", city),
+                                                    () -> Component.translatable("realweather.cmd.city_set", city),
                                                     true
                                             );
                                             return 1;
@@ -281,12 +281,12 @@ public class TempWinterMod {
     private static int executeMode(net.minecraft.commands.CommandSourceStack source, String mode, int minutes) {
         boolean ok = RealWeatherService.setOverrideMode(source.getServer(), mode, minutes);
         if (!ok) {
-            source.sendFailure(Component.translatable("temp_winter.cmd.mode_usage"));
+            source.sendFailure(Component.translatable("realweather.cmd.mode_usage"));
             return 0;
         }
         source.sendSuccess(() -> minutes > 0
-                ? Component.translatable("temp_winter.cmd.mode_set_timed", mode, minutes)
-                : Component.translatable("temp_winter.cmd.mode_set", mode), true);
+                ? Component.translatable("realweather.cmd.mode_set_timed", mode, minutes)
+                : Component.translatable("realweather.cmd.mode_set", mode), true);
         return 1;
     }
 }
