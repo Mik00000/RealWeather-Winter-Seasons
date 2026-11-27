@@ -21,11 +21,11 @@ Download ready-to-play `.jar` builds from the **[Releases](../../releases/latest
 
 ## Features
 
-- **Real-World Weather Sync:** Polls **Open-Meteo** (with automatic **wttr.in** fallback) using a city name or dynamic `auto` IP geolocation (`https://ipapi.co/json/` + fallback).
-- **3-State Precipitation & Thunderstorms:**
+- **Real-World Weather & Ground Snow Sync:** Polls **Open-Meteo** (including real `snow_depth`, with automatic **wttr.in** fallback) using a city name or dynamic `auto` IP geolocation (`https://ipapi.co/json/` + fallback). Even if the server was offline during an overnight snowfall or you enter newly loaded chunks, ground snow layers blanket up to the real `snow_depth`.
+- **3-State Precipitation & Smart Melt Threshold:**
   - `<= 0.0°C`: Snowfall, uneven snowdrifts (up to `3` blocks / 24 layers via smooth 2D noise), and water freezing.
-  - `0.0°C .. 3.0°C`: Wet snow (snowflakes in the air without snow layers or ice).
-  - `> 3.0°C` (rain or WMO codes `95, 96, 99`): Real rain and thunderstorms.
+  - `0.0°C .. 1.5°C` (`meltTemperatureC`): Wet snow in air; existing ground snow holds steady without melting prematurely.
+  - `> 1.5°C` (or warm rain): Snow layers and sky-exposed ice gradually melt; `> 3.0°C` switches to real rain and WMO thunderstorms (`95, 96, 99`).
 - **Disables Vanilla Weather Cycle:** Prevents random vanilla storms and sleep-induced weather resets in the Overworld while real weather is active.
 - **Interactive Snow & Ice Physics:**
   - **Snow Trampling:** Walking on multi-layer snow compresses it down to 1 layer.

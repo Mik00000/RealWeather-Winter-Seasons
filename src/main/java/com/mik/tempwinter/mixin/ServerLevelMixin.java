@@ -3,6 +3,7 @@ package com.mik.tempwinter.mixin;
 import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
 import com.mik.tempwinter.WinterConfig;
 import com.mik.tempwinter.client.ShaderAndModCompat;
+import com.mik.tempwinter.compat.SeasonCompat;
 import com.mik.tempwinter.weather.HeatSourceHelper;
 import com.mik.tempwinter.weather.RealWeatherService;
 import net.minecraft.core.BlockPos;
@@ -10,6 +11,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.SnowLayerBlock;
 import net.minecraft.world.level.block.state.BlockState;
@@ -89,17 +91,22 @@ public class ServerLevelMixin {
         }
         BlockPos top = self.getHeightmapPos(Heightmap.Types.MOTION_BLOCKING, pos);
         int maxBlocks = WinterConfig.MAX_SNOW_BLOCKS.get();
-        int capLayers = WinterConfig.UNEVEN_DRIFTS.get()
-                ? tempwinter$localDriftCapLayers(top.getX(), top.getZ(), maxBlocks)
-                : maxBlocks * 8;
-
         int snowBelow = 0;
         BlockPos cursor = top.below();
         while (snowBelow < maxBlocks && self.getBlockState(cursor).is(Blocks.SNOW)) {
             snowBelow++;
             cursor = cursor.below();
         }
-        BlockState ground = self.getBlockState(cursor);
+        int capLayers = tempwinter$computeColumnCapLayers(self, top, self.getBlockState(cursor), maxBlocks);
+        if (capLayers <= 0) {
+            return 0;
+        }
+        int remaining = capLayers - snowBelow * 8;
+        return remaining <= 0 ? 0 : Math.min(8, remaining);
+    }
+
+    @Unique
+    private static int tempwinter$computeColumnCapLayers(ServerLevel self, BlockPos top, BlockState ground, int maxBlocks) {
         var groundId = BuiltInRegistries.BLOCK.getKey(ground.getBlock());
         String fullGroundId = groundId.toString();
         String groundPath = groundId.getPath();
@@ -117,6 +124,9 @@ public class ServerLevelMixin {
         if (WinterConfig.HEAT_MELTS_SNOW.get() && HeatSourceHelper.hasHeatNearby(self, top, WinterConfig.HEAT_SOURCE_RADIUS.get())) {
             return 0;
         }
+        int capLayers = WinterConfig.UNEVEN_DRIFTS.get()
+                ? tempwinter$localDriftCapLayers(top.getX(), top.getZ(), maxBlocks)
+                : maxBlocks * 8;
         if (WinterConfig.REDUCE_PATH_SNOW.get() && (ground.is(Blocks.DIRT_PATH)
                 || ground.is(Blocks.GRAVEL)
                 || ground.is(Blocks.COBBLESTONE)
@@ -125,25 +135,27 @@ public class ServerLevelMixin {
                 || ground.is(Blocks.SMOOTH_STONE))) {
             capLayers = Math.min(capLayers, 3);
         }
-        int remaining = capLayers - snowBelow * 8;
-        return remaining <= 0 ? 0 : Math.min(8, remaining);
+        return capLayers;
     }
 
     @Inject(method = "tickChunk(Lnet/minecraft/world/level/chunk/LevelChunk;I)V", at = @At("TAIL"))
-    private void tempwinter$meltWarmSnowAndIce(LevelChunk chunk, int randomTickSpeed, CallbackInfo ci) {
+    private void tempwinter$syncGroundSnowAndMelt(LevelChunk chunk, int randomTickSpeed, CallbackInfo ci) {
         ServerLevel self = (ServerLevel) (Object) this;
-        if (!self.dimension().equals(Level.OVERWORLD)) {
+        if (!self.dimension().equals(Level.OVERWORLD) || !WinterConfig.ENABLED.get() || RealWeatherService.isVanillaWeatherMode()) {
             return;
         }
+
+        tempwinter$applySnowDepthCover(self, chunk);
+
         boolean warmMelt = RealWeatherService.canMeltSnow();
-        boolean heatMelt = WinterConfig.ENABLED.get() && WinterConfig.HEAT_MELTS_SNOW.get();
+        boolean heatMelt = WinterConfig.HEAT_MELTS_SNOW.get();
         if (!warmMelt && !heatMelt) {
             return;
         }
         float meltChance;
         if (warmMelt) {
-            double excessC = RealWeatherService.getCurrentTempC() - WinterConfig.FREEZE_TEMPERATURE_C.get();
-            meltChance = (float) Math.min(0.25, 0.02 + excessC * 0.015 + (RealWeatherService.shouldUseRain() ? 0.08 : 0.0));
+            double excessC = RealWeatherService.getCurrentTempC() - WinterConfig.MELT_TEMPERATURE_C.get();
+            meltChance = (float) Math.min(0.25, 0.02 + Math.max(0.0, excessC) * 0.015 + (RealWeatherService.shouldUseRain() ? 0.08 : 0.0));
         } else {
             meltChance = 0.08F;
         }
@@ -154,7 +166,8 @@ public class ServerLevelMixin {
         int x = chunk.getPos().getMinBlockX() + self.random.nextInt(16);
         int z = chunk.getPos().getMinBlockZ() + self.random.nextInt(16);
         BlockPos top = self.getHeightmapPos(Heightmap.Types.MOTION_BLOCKING, new BlockPos(x, 0, z));
-        if (!warmMelt && !HeatSourceHelper.hasHeatNearby(self, top, WinterConfig.HEAT_SOURCE_RADIUS.get())) {
+        boolean nearHeat = heatMelt && HeatSourceHelper.hasHeatNearby(self, top, WinterConfig.HEAT_SOURCE_RADIUS.get());
+        if (!warmMelt && !nearHeat) {
             return;
         }
 
@@ -164,6 +177,12 @@ public class ServerLevelMixin {
         if (snowPos != null) {
             BlockState state = self.getBlockState(snowPos);
             int layers = state.getValue(SnowLayerBlock.LAYERS);
+            if (!nearHeat && !RealWeatherService.shouldUseRain() && RealWeatherService.getCurrentTempC() <= 2.5) {
+                int floor = RealWeatherService.getSnowDepthTargetLayers();
+                if (layers <= floor) {
+                    return;
+                }
+            }
             if (layers <= 1) {
                 self.removeBlock(snowPos, false);
             } else {
@@ -175,6 +194,76 @@ public class ServerLevelMixin {
         BlockPos icePos = top.below();
         if (self.getBlockState(icePos).is(Blocks.ICE) && self.canSeeSky(top)) {
             self.setBlockAndUpdate(icePos, Blocks.WATER.defaultBlockState());
+        }
+    }
+
+    @Unique
+    private static void tempwinter$applySnowDepthCover(ServerLevel self, LevelChunk chunk) {
+        int snowDepthTarget = RealWeatherService.getSnowDepthTargetLayers();
+        if (snowDepthTarget <= 0 || !WinterConfig.PLACE_SNOW_BLOCKS.get()) {
+            return;
+        }
+        if (WinterConfig.YIELD_TO_SNOW_REAL_MAGIC.get() && ShaderAndModCompat.hasSnowRealMagic()) {
+            return;
+        }
+        if (!SeasonCompat.isServerWinterActive() && RealWeatherService.getCurrentTempC() > WinterConfig.MELT_TEMPERATURE_C.get()) {
+            return;
+        }
+        int maxBlocks = WinterConfig.MAX_SNOW_BLOCKS.get();
+        int minX = chunk.getPos().getMinBlockX();
+        int minZ = chunk.getPos().getMinBlockZ();
+        for (int i = 0; i < 4; i++) {
+            int x = minX + self.random.nextInt(16);
+            int z = minZ + self.random.nextInt(16);
+            BlockPos top = self.getHeightmapPos(Heightmap.Types.MOTION_BLOCKING, new BlockPos(x, 0, z));
+            if (!self.canSeeSky(top) || self.getBrightness(LightLayer.BLOCK, top) >= 10) {
+                continue;
+            }
+            BlockPos below = top.below();
+            BlockState belowState = self.getBlockState(below);
+            if (belowState.is(Blocks.WATER) && self.getFluidState(below).isSource() && RealWeatherService.canFreezeWater()) {
+                if (!WinterConfig.HEAT_MELTS_SNOW.get() || !HeatSourceHelper.hasHeatNearby(self, top, WinterConfig.HEAT_SOURCE_RADIUS.get())) {
+                    self.setBlockAndUpdate(below, Blocks.ICE.defaultBlockState());
+                }
+                continue;
+            }
+            BlockPos placePos = self.getBlockState(top).is(Blocks.SNOW) ? top : (self.getBlockState(top).isAir() ? top : null);
+            if (placePos == null) {
+                continue;
+            }
+            int snowBelow = 0;
+            BlockPos cursor = placePos.below();
+            while (snowBelow < maxBlocks && self.getBlockState(cursor).is(Blocks.SNOW)) {
+                snowBelow++;
+                cursor = cursor.below();
+            }
+            int capLayers = tempwinter$computeColumnCapLayers(self, placePos, self.getBlockState(cursor), maxBlocks);
+            int goal = Math.min(capLayers, snowDepthTarget);
+            if (goal <= 0) {
+                continue;
+            }
+            BlockState atPlace = self.getBlockState(placePos);
+            int curLayers = atPlace.is(Blocks.SNOW) ? atPlace.getValue(SnowLayerBlock.LAYERS) : 0;
+            int totalExisting = snowBelow * 8 + curLayers;
+            if (totalExisting >= goal) {
+                continue;
+            }
+            if (curLayers == 0) {
+                BlockState snow = Blocks.SNOW.defaultBlockState();
+                if (snow.canSurvive(self, placePos)) {
+                    self.setBlockAndUpdate(placePos, snow);
+                }
+            } else if (curLayers < 8) {
+                self.setBlockAndUpdate(placePos, atPlace.setValue(SnowLayerBlock.LAYERS, curLayers + 1));
+            } else {
+                BlockPos above = placePos.above();
+                if (self.getBlockState(above).isAir()) {
+                    BlockState snow = Blocks.SNOW.defaultBlockState();
+                    if (snow.canSurvive(self, above)) {
+                        self.setBlockAndUpdate(above, snow);
+                    }
+                }
+            }
         }
     }
 

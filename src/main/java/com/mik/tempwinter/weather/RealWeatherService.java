@@ -41,6 +41,7 @@ public final class RealWeatherService {
     private static volatile float currentIntensity = 0.5F;
     private static volatile double currentTempC = -1.0;
     private static volatile double currentWindKmh = 0.0;
+    private static volatile double currentSnowDepthM = 0.0;
     private static volatile boolean currentHasRainOnly = false;
     private static volatile boolean currentThunder = false;
     private static volatile boolean fetchInFlight = false;
@@ -55,7 +56,7 @@ public final class RealWeatherService {
     private static double resolvedLon = 24.0297;
     private static long ticksUntilNextFetch = 20L;
 
-    private record PendingUpdate(float intensity, double tempC, double windKmh, boolean rainOnly, boolean thunder, String summary) {
+    private record PendingUpdate(float intensity, double tempC, double windKmh, double snowDepthM, boolean rainOnly, boolean thunder, String summary) {
     }
 
     private RealWeatherService() {
@@ -88,7 +89,26 @@ public final class RealWeatherService {
         if (!WinterConfig.ENABLED.get() || !WinterConfig.REAL_WEATHER_ENABLED.get() || !WinterConfig.MELT_WHEN_WARM.get()) {
             return false;
         }
-        return currentTempC > WinterConfig.FREEZE_TEMPERATURE_C.get();
+        if (shouldUseRain() && currentTempC > WinterConfig.FREEZE_TEMPERATURE_C.get()) {
+            return true;
+        }
+        return currentTempC > WinterConfig.MELT_TEMPERATURE_C.get();
+    }
+
+    public static double getSnowDepthMeters() {
+        return currentSnowDepthM;
+    }
+
+    public static int getSnowDepthTargetLayers() {
+        if (!WinterConfig.ENABLED.get() || !WinterConfig.REAL_WEATHER_ENABLED.get()
+                || !WinterConfig.SYNC_SNOW_DEPTH.get() || isVanillaWeatherMode()) {
+            return 0;
+        }
+        if (currentSnowDepthM < 0.005 || currentTempC > WinterConfig.WET_SNOW_MAX_TEMPERATURE_C.get()) {
+            return 0;
+        }
+        int maxLayers = WinterConfig.MAX_SNOW_BLOCKS.get() * 8;
+        return Math.max(1, Math.min(maxLayers, (int) Math.round(currentSnowDepthM * 24.0)));
     }
 
     public static boolean forceSync() {
@@ -214,11 +234,12 @@ public final class RealWeatherService {
                 : "";
         return String.format(
                 Locale.ROOT,
-                "[RealWeather] %s%s | %.1f°C | wind %.1f km/h | %s%s (%.0f%%) | freeze=%s, snowLayers=%s, melt=%s",
+                "[RealWeather] %s%s | %.1f°C | wind %.1f km/h | snowDepth %.2fm | %s%s (%.0f%%) | freeze=%s, snowLayers=%s, melt=%s",
                 resolvedLabel,
                 offsetStr,
                 currentTempC,
                 currentWindKmh,
+                currentSnowDepthM,
                 mode,
                 timer,
                 currentIntensity * 100.0F,
@@ -257,6 +278,7 @@ public final class RealWeatherService {
         currentIntensity = 0.0F;
         currentTempC = -1.0;
         currentWindKmh = 0.0;
+        currentSnowDepthM = 0.0;
         currentHasRainOnly = false;
         currentThunder = false;
         cachedCityKey = null;
@@ -315,6 +337,7 @@ public final class RealWeatherService {
         currentIntensity = update.intensity();
         currentTempC = update.tempC();
         currentWindKmh = update.windKmh();
+        currentSnowDepthM = update.snowDepthM();
         currentHasRainOnly = update.rainOnly();
         currentThunder = update.thunder();
 
@@ -376,11 +399,11 @@ public final class RealWeatherService {
             String url = offsetHours == 0
                     ? String.format(
                             Locale.ROOT,
-                            "https://api.open-meteo.com/v1/forecast?latitude=%.4f&longitude=%.4f&current=temperature_2m,precipitation,rain,snowfall,cloud_cover,weather_code,wind_speed_10m",
+                            "https://api.open-meteo.com/v1/forecast?latitude=%.4f&longitude=%.4f&current=temperature_2m,precipitation,rain,snowfall,snow_depth,cloud_cover,weather_code,wind_speed_10m",
                             resolvedLat, resolvedLon)
                     : String.format(
                             Locale.ROOT,
-                            "https://api.open-meteo.com/v1/forecast?latitude=%.4f&longitude=%.4f&current=temperature_2m&hourly=temperature_2m,precipitation,rain,snowfall,cloud_cover,weather_code,wind_speed_10m&past_days=1&forecast_days=2&timezone=auto",
+                            "https://api.open-meteo.com/v1/forecast?latitude=%.4f&longitude=%.4f&current=temperature_2m&hourly=temperature_2m,precipitation,rain,snowfall,snow_depth,cloud_cover,weather_code,wind_speed_10m&past_days=1&forecast_days=2&timezone=auto",
                             resolvedLat, resolvedLon);
             HttpRequest req = HttpRequest.newBuilder(URI.create(url))
                     .timeout(Duration.ofSeconds(10))
@@ -398,6 +421,7 @@ public final class RealWeatherService {
             double precip;
             double rain;
             double snow;
+            double snowDepthM;
             int clouds;
             int wmo;
             double windKmh;
@@ -412,6 +436,7 @@ public final class RealWeatherService {
                 precip = getArrDouble(hourly, "precipitation", idx, 0.0);
                 rain = getArrDouble(hourly, "rain", idx, 0.0);
                 snow = getArrDouble(hourly, "snowfall", idx, 0.0);
+                snowDepthM = getArrDouble(hourly, "snow_depth", idx, 0.0);
                 clouds = (int) Math.round(getArrDouble(hourly, "cloud_cover", idx, 0.0));
                 wmo = (int) Math.round(getArrDouble(hourly, "weather_code", idx, 0.0));
                 windKmh = getArrDouble(hourly, "wind_speed_10m", idx, 0.0);
@@ -420,6 +445,7 @@ public final class RealWeatherService {
                 precip = cur.has("precipitation") ? cur.get("precipitation").getAsDouble() : 0.0;
                 rain = cur.has("rain") ? cur.get("rain").getAsDouble() : 0.0;
                 snow = cur.has("snowfall") ? cur.get("snowfall").getAsDouble() : 0.0;
+                snowDepthM = cur.has("snow_depth") && !cur.get("snow_depth").isJsonNull() ? cur.get("snow_depth").getAsDouble() : 0.0;
                 clouds = cur.has("cloud_cover") ? cur.get("cloud_cover").getAsInt() : 0;
                 wmo = cur.has("weather_code") ? cur.get("weather_code").getAsInt() : 0;
                 windKmh = cur.has("wind_speed_10m") ? cur.get("wind_speed_10m").getAsDouble() : 0.0;
@@ -429,9 +455,9 @@ public final class RealWeatherService {
             boolean drizzleOrFlurryWmo = (wmo >= 51 && wmo <= 57) || wmo == 77 || wmo == 85 || wmo == 86;
             float intensity = computeIntensity(precip, snow, clouds, windKmh, thunder, drizzleOrFlurryWmo, overcastFlurry, windBoost);
             boolean rainOnly = (rain > 0.0 || (wmo >= 51 && wmo <= 67) || (wmo >= 80 && wmo <= 82)) && snow <= 0.0 && wmo != 77 && wmo != 85 && wmo != 86;
-            String label = String.format(Locale.ROOT, "%s [open-meteo%s] wmo=%d precip=%.2f rain=%.2f snow=%.2f wind=%.1fkm/h clouds=%d%%",
-                    resolvedLabel, offsetHours != 0 ? String.format(Locale.ROOT, " %+dh", offsetHours) : "", wmo, precip, rain, snow, windKmh, clouds);
-            return new PendingUpdate(intensity, tempC, windKmh, rainOnly, thunder, label);
+            String label = String.format(Locale.ROOT, "%s [open-meteo%s] wmo=%d precip=%.2f rain=%.2f snow=%.2f depth=%.2fm wind=%.1fkm/h clouds=%d%%",
+                    resolvedLabel, offsetHours != 0 ? String.format(Locale.ROOT, " %+dh", offsetHours) : "", wmo, precip, rain, snow, snowDepthM, windKmh, clouds);
+            return new PendingUpdate(intensity, tempC, windKmh, snowDepthM, rainOnly, thunder, label);
         } catch (Exception e) {
             LOGGER.warn("[TempWinter] Open-Meteo failed ({}), trying fallback API", e.getMessage());
             return null;
@@ -497,7 +523,7 @@ public final class RealWeatherService {
             boolean rainOnly = isRainCode && !isSnowCode;
             String label = String.format(Locale.ROOT, "%s [wttr.in] code=%d precip=%.2f wind=%.1fkm/h clouds=%d%%",
                     resolvedLabel, code, precip, windKmh, clouds);
-            return new PendingUpdate(intensity, tempC, windKmh, rainOnly, thunder, label);
+            return new PendingUpdate(intensity, tempC, windKmh, isSnowCode ? Math.max(0.02, precip * 0.01) : 0.0, rainOnly, thunder, label);
         } catch (Exception e) {
             LOGGER.warn("[TempWinter] Fallback wttr.in failed: {}", e.getMessage());
             return null;

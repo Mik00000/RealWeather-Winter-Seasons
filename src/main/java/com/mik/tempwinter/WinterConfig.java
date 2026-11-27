@@ -24,7 +24,9 @@ public final class WinterConfig {
     public static final ModConfigSpec.IntValue WEATHER_TIME_OFFSET_HOURS;
     public static final ModConfigSpec.DoubleValue OVERCAST_FLURRY_INTENSITY;
     public static final ModConfigSpec.DoubleValue FREEZE_TEMPERATURE_C;
+    public static final ModConfigSpec.DoubleValue MELT_TEMPERATURE_C;
     public static final ModConfigSpec.DoubleValue WET_SNOW_MAX_TEMPERATURE_C;
+    public static final ModConfigSpec.BooleanValue SYNC_SNOW_DEPTH;
     public static final ModConfigSpec.BooleanValue WIND_BOOST_ENABLED;
     public static final ModConfigSpec.BooleanValue MELT_WHEN_WARM;
     public static final ModConfigSpec.BooleanValue REDUCE_PATH_SNOW;
@@ -105,11 +107,17 @@ public final class WinterConfig {
                 .comment("Light snowfall intensity (0.0-1.0) when real weather is cloudy (>=65% cloud cover) without precipitation.")
                 .defineInRange("overcastFlurryIntensity", 0.25, 0.0, 1.0);
         FREEZE_TEMPERATURE_C = builder
-                .comment("Real temperature threshold (Celsius) at or below which water freezes into ice and snow layers accumulate.")
+                .comment("Real temperature threshold (Celsius) at or below which water freezes into ice and dry snow layers accumulate.")
                 .defineInRange("freezeTemperatureC", 0.0, -30.0, 15.0);
+        MELT_TEMPERATURE_C = builder
+                .comment("Real temperature (Celsius) above which snow and ice begin to gradually melt (between freezeTemperatureC and meltTemperatureC snow stays on the ground unless raining).")
+                .defineInRange("meltTemperatureC", 1.5, -10.0, 25.0);
         WET_SNOW_MAX_TEMPERATURE_C = builder
-                .comment("Above freezeTemperatureC and up to this temperature, precipitation falls as wet snow (particles only, no snow layers or ice).")
+                .comment("Above freezeTemperatureC and up to this temperature, active precipitation falls as wet snow (particles only, no new layers).")
                 .defineInRange("wetSnowMaxTemperatureC", 3.0, -10.0, 25.0);
+        SYNC_SNOW_DEPTH = builder
+                .comment("Blanket loaded and newly visited chunks with ground snow matching Open-Meteo real snow_depth even after snowfall has stopped.")
+                .define("syncSnowDepth", true);
         WIND_BOOST_ENABLED = builder
                 .comment("Scale snowfall/rain density up when real-world wind_speed_10m is strong.")
                 .define("windBoostEnabled", true);
