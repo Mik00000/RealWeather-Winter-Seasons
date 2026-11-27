@@ -7,6 +7,7 @@ import com.mik.tempwinter.compat.SeasonCompat;
 import com.mik.tempwinter.weather.HeatSourceHelper;
 import com.mik.tempwinter.weather.RealWeatherService;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.BlockTags;
@@ -101,6 +102,15 @@ public class ServerLevelMixin {
         if (capLayers <= 0) {
             return 0;
         }
+        int curLayers = self.getBlockState(top).is(Blocks.SNOW)
+                ? self.getBlockState(top).getValue(SnowLayerBlock.LAYERS)
+                : (self.getBlockState(top.below()).is(Blocks.SNOW) ? self.getBlockState(top.below()).getValue(SnowLayerBlock.LAYERS) : 0);
+        if (WinterConfig.SMOOTH_DRIFTS.get() && (snowBelow > 0 || curLayers >= 3)) {
+            BlockPos checkPos = self.getBlockState(top.below()).is(Blocks.SNOW) && self.getBlockState(top.below()).getValue(SnowLayerBlock.LAYERS) < 8 ? top.below() : top;
+            if (tempwinter$shouldWaitForNeighbors(self, checkPos, curLayers, snowBelow)) {
+                return 0;
+            }
+        }
         int remaining = capLayers - snowBelow * 8;
         return remaining <= 0 ? 0 : Math.min(8, remaining);
     }
@@ -133,9 +143,47 @@ public class ServerLevelMixin {
                 || ground.is(Blocks.STONE_BRICKS)
                 || ground.is(Blocks.MOSSY_COBBLESTONE)
                 || ground.is(Blocks.SMOOTH_STONE))) {
-            capLayers = Math.min(capLayers, 3);
+            return Math.min(capLayers, 3);
+        }
+        if (WinterConfig.WALL_DRIFT_BONUS.get()) {
+            for (Direction dir : Direction.Plane.HORIZONTAL) {
+                BlockState adj = self.getBlockState(top.relative(dir));
+                if (adj.isSolid() && !adj.is(Blocks.SNOW) && !adj.is(Blocks.SNOW_BLOCK) && !adj.is(BlockTags.DOORS)) {
+                    capLayers = Math.min(maxBlocks * 8, capLayers + 4);
+                    break;
+                }
+            }
         }
         return capLayers;
+    }
+
+    @Unique
+    private static boolean tempwinter$shouldWaitForNeighbors(ServerLevel self, BlockPos pos, int curLayers, int snowBelow) {
+        int myHeight = pos.getY() * 8 + curLayers;
+        for (Direction dir : Direction.Plane.HORIZONTAL) {
+            BlockPos nCol = pos.relative(dir);
+            BlockPos nTop = self.getHeightmapPos(Heightmap.Types.MOTION_BLOCKING, nCol);
+            if (Math.abs(nTop.getY() - pos.getY()) > 1) {
+                continue;
+            }
+            BlockPos nSnow = self.getBlockState(nTop.below()).is(Blocks.SNOW)
+                    && self.getBlockState(nTop.below()).getValue(SnowLayerBlock.LAYERS) < 8
+                    ? nTop.below()
+                    : nTop;
+            BlockState nState = self.getBlockState(nSnow);
+            int nLayers = nState.is(Blocks.SNOW) ? nState.getValue(SnowLayerBlock.LAYERS) : (nState.is(Blocks.SNOW_BLOCK) ? 8 : 0);
+            if (nLayers == 0 && !nState.isAir()) {
+                continue;
+            }
+            if (nLayers == 0 && !Blocks.SNOW.defaultBlockState().canSurvive(self, nSnow)) {
+                continue;
+            }
+            int nHeight = nSnow.getY() * 8 + nLayers;
+            if (myHeight - nHeight > 3) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Inject(method = "tickChunk(Lnet/minecraft/world/level/chunk/LevelChunk;I)V", at = @At("TAIL"))
@@ -265,6 +313,10 @@ public class ServerLevelMixin {
             if (totalExisting >= goal) {
                 continue;
             }
+            if (WinterConfig.SMOOTH_DRIFTS.get() && (snowBelow > 0 || curLayers >= 3)
+                    && tempwinter$shouldWaitForNeighbors(self, placePos, curLayers, snowBelow)) {
+                continue;
+            }
             if (curLayers == 0) {
                 BlockState snow = Blocks.SNOW.defaultBlockState();
                 if (snow.canSurvive(self, placePos)) {
@@ -282,6 +334,46 @@ public class ServerLevelMixin {
                 }
             }
         }
+
+        if (WinterConfig.UNDER_TREE_SNOW.get() && self.random.nextInt(4) == 0) {
+            int ux = minX + self.random.nextInt(16);
+            int uz = minZ + self.random.nextInt(16);
+            if (!RealWeatherService.isColumnTrampled(ux, uz, gameTime)) {
+                BlockPos skyTop = self.getHeightmapPos(Heightmap.Types.MOTION_BLOCKING, new BlockPos(ux, 0, uz));
+                BlockPos underTop = self.getHeightmapPos(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, new BlockPos(ux, 0, uz));
+                if (underTop.getY() < skyTop.getY()
+                        && self.getBrightness(LightLayer.BLOCK, underTop) < 10
+                        && tempwinter$onlyLeavesAbove(self, underTop, skyTop)
+                        && (!WinterConfig.HEAT_MELTS_SNOW.get() || !HeatSourceHelper.hasHeatNearby(self, underTop, WinterConfig.HEAT_SOURCE_RADIUS.get()))) {
+                    BlockState atUnder = self.getBlockState(underTop);
+                    if (atUnder.isAir() && Blocks.SNOW.defaultBlockState().canSurvive(self, underTop)) {
+                        self.setBlockAndUpdate(underTop, Blocks.SNOW.defaultBlockState());
+                    } else if (atUnder.is(Blocks.SNOW) && atUnder.getValue(SnowLayerBlock.LAYERS) < 2 && snowDepthTarget >= 2) {
+                        self.setBlockAndUpdate(underTop, atUnder.setValue(SnowLayerBlock.LAYERS, 2));
+                    }
+                }
+            }
+        }
+    }
+
+    @Unique
+    private static boolean tempwinter$onlyLeavesAbove(ServerLevel self, BlockPos underTop, BlockPos skyTop) {
+        boolean foundLeaves = false;
+        BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
+        int maxY = Math.min(skyTop.getY(), underTop.getY() + 18);
+        for (int y = underTop.getY(); y <= maxY; y++) {
+            cursor.set(underTop.getX(), y, underTop.getZ());
+            BlockState st = self.getBlockState(cursor);
+            if (st.isAir() || st.is(Blocks.SNOW)) {
+                continue;
+            }
+            if (st.is(BlockTags.LEAVES)) {
+                foundLeaves = true;
+                continue;
+            }
+            return false;
+        }
+        return foundLeaves;
     }
 
     @Unique

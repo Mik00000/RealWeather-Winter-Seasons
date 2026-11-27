@@ -37,6 +37,10 @@ public final class WinterConfig {
     public static final ModConfigSpec.DoubleValue FRAGILE_ICE_MAX_TEMP_C;
     public static final ModConfigSpec.BooleanValue FROST_OVERLAY;
     public static final ModConfigSpec.DoubleValue FROST_OVERLAY_TEMP_C;
+    public static final ModConfigSpec.BooleanValue SMOOTH_DRIFTS;
+    public static final ModConfigSpec.BooleanValue WALL_DRIFT_BONUS;
+    public static final ModConfigSpec.BooleanValue UNDER_TREE_SNOW;
+    public static final ModConfigSpec.BooleanValue SCOOP_SNOWBALLS;
     public static final ModConfigSpec.BooleanValue OVERHANG_SNOW_DRIP;
     public static final ModConfigSpec.DoubleValue BLIZZARD_WIND_THRESHOLD_KMH;
     public static final ModConfigSpec.BooleanValue COLD_SWEAT_INTEGRATION;
@@ -148,6 +152,18 @@ public final class WinterConfig {
         FROST_OVERLAY_TEMP_C = builder
                 .comment("Temperature (Celsius) at or below which outdoor frost screen overlay appears.")
                 .defineInRange("frostOverlayTempC", -10.0, -40.0, 0.0);
+        SMOOTH_DRIFTS = builder
+                .comment("Limit steep height jumps between neighboring snow columns so drifts form smooth waves.")
+                .define("smoothDrifts", true);
+        WALL_DRIFT_BONUS = builder
+                .comment("Allow slightly deeper snowdrifts (+4 layers) against solid walls and rocks.")
+                .define("wallDriftBonus", true);
+        UNDER_TREE_SNOW = builder
+                .comment("Let snow settle lightly (1-2 layers) on ground beneath tree leaves.")
+                .define("underTreeSnow", true);
+        SCOOP_SNOWBALLS = builder
+                .comment("Right-click snow layers with an empty main hand to scoop a snowball and lower the layer by 1.")
+                .define("scoopSnowballs", true);
         builder.pop();
 
         builder.push("visuals");

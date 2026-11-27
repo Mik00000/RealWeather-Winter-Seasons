@@ -28,7 +28,8 @@ Download ready-to-play `.jar` builds from the **[Releases](../../releases/latest
   - `> 1.5°C` (or warm rain): Snow layers and sky-exposed ice gradually melt; `> 3.0°C` switches to real rain and WMO thunderstorms (`95, 96, 99`).
 - **Disables Vanilla Weather Cycle:** Prevents random vanilla storms and sleep-induced weather resets in the Overworld while real weather is active.
 - **Interactive Snow & Ice Physics:**
-  - **Snow Trampling:** Walking on multi-layer snow compresses it down to 1 layer.
+  - **Snow Trampling & Hand Scooping:** Walking on multi-layer snow compresses it down to 1 layer (keeping footpaths clear); right-clicking snow layers with an empty hand scoops a snowball.
+  - **Smooth & Natural Drifts:** Neighbor-clamped smoothing, windward wall buildup (`+4` layers), and dappled under-tree snow beneath leaves.
   - **Warm Melting:** Snow layers and sky-exposed ice gradually melt above freezing.
   - **Fragile Ice:** Thin ice over water can crack under sprinting/falling players above `-5°C` (*Frost Walker* protects).
   - **Heat Sources & Machinery Protection:** Vanilla and modded heat sources (`blaze_burner`, `stove`, `campfire`, `furnace`, `light >= 12`) keep a configurable radius clear; rails, tracks, and Create machinery (`belt`, `shaft`, `cogwheel`, `funnel`, `depot`, etc.) are protected from snow buildup (customizable in config).

@@ -17,6 +17,8 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -37,6 +39,7 @@ import net.neoforged.fml.loading.FMLEnvironment;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
+import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
 import net.neoforged.neoforge.event.server.ServerStartingEvent;
 import net.neoforged.neoforge.event.server.ServerStoppingEvent;
 import net.neoforged.neoforge.event.tick.LevelTickEvent;
@@ -64,6 +67,7 @@ public class TempWinterMod {
         NeoForge.EVENT_BUS.addListener(this::onLevelTickPost);
         NeoForge.EVENT_BUS.addListener(this::onPlayerTick);
         NeoForge.EVENT_BUS.addListener(this::onPlayerLogin);
+        NeoForge.EVENT_BUS.addListener(this::onRightClickBlock);
         NeoForge.EVENT_BUS.addListener(this::onRegisterCommands);
         if (FMLEnvironment.dist == Dist.CLIENT) {
             WinterClientEvents.register();
@@ -215,6 +219,37 @@ public class TempWinterMod {
                 .get(Enchantments.FROST_WALKER)
                 .map(holder -> EnchantmentHelper.getItemEnchantmentLevel(holder, boots) > 0)
                 .orElse(false);
+    }
+
+    private void onRightClickBlock(PlayerInteractEvent.RightClickBlock event) {
+        if (event.getLevel().isClientSide()
+                || event.getHand() != InteractionHand.MAIN_HAND
+                || !WinterConfig.ENABLED.get()
+                || !WinterConfig.SCOOP_SNOWBALLS.get()) {
+            return;
+        }
+        if (!(event.getEntity() instanceof ServerPlayer player) || !player.getMainHandItem().isEmpty()) {
+            return;
+        }
+        Level level = event.getLevel();
+        BlockPos pos = event.getPos();
+        BlockState state = level.getBlockState(pos);
+        if (!state.is(Blocks.SNOW) || !state.hasProperty(SnowLayerBlock.LAYERS)) {
+            return;
+        }
+        int layers = state.getValue(SnowLayerBlock.LAYERS);
+        if (layers <= 1) {
+            level.removeBlock(pos, false);
+        } else {
+            level.setBlockAndUpdate(pos, state.setValue(SnowLayerBlock.LAYERS, layers - 1));
+        }
+        ItemStack snowball = new ItemStack(Items.SNOWBALL);
+        if (!player.getInventory().add(snowball)) {
+            player.drop(snowball, false);
+        }
+        level.playSound(null, pos, SoundEvents.SNOW_BREAK, SoundSource.BLOCKS, 0.5F, 1.1F);
+        event.setCanceled(true);
+        event.setCancellationResult(InteractionResult.SUCCESS);
     }
 
     private void onRegisterCommands(RegisterCommandsEvent event) {
