@@ -179,7 +179,13 @@ public class ServerLevelMixin {
             int layers = state.getValue(SnowLayerBlock.LAYERS);
             if (!nearHeat && !RealWeatherService.shouldUseRain() && RealWeatherService.getCurrentTempC() <= 2.5) {
                 int floor = RealWeatherService.getSnowDepthTargetLayers();
-                if (layers <= floor) {
+                int snowBelow = 0;
+                BlockPos cursor = snowPos.below();
+                while (snowBelow < WinterConfig.MAX_SNOW_BLOCKS.get() && self.getBlockState(cursor).is(Blocks.SNOW)) {
+                    snowBelow++;
+                    cursor = cursor.below();
+                }
+                if (snowBelow * 8 + layers <= floor) {
                     return;
                 }
             }
@@ -199,6 +205,9 @@ public class ServerLevelMixin {
 
     @Unique
     private static void tempwinter$applySnowDepthCover(ServerLevel self, LevelChunk chunk) {
+        if (self.random.nextInt(4) != 0) {
+            return;
+        }
         int snowDepthTarget = RealWeatherService.getSnowDepthTargetLayers();
         if (snowDepthTarget <= 0 || !WinterConfig.PLACE_SNOW_BLOCKS.get()) {
             return;
@@ -212,9 +221,13 @@ public class ServerLevelMixin {
         int maxBlocks = WinterConfig.MAX_SNOW_BLOCKS.get();
         int minX = chunk.getPos().getMinBlockX();
         int minZ = chunk.getPos().getMinBlockZ();
-        for (int i = 0; i < 4; i++) {
+        long gameTime = self.getGameTime();
+        for (int i = 0; i < 2; i++) {
             int x = minX + self.random.nextInt(16);
             int z = minZ + self.random.nextInt(16);
+            if (RealWeatherService.isColumnTrampled(x, z, gameTime)) {
+                continue;
+            }
             BlockPos top = self.getHeightmapPos(Heightmap.Types.MOTION_BLOCKING, new BlockPos(x, 0, z));
             if (!self.canSeeSky(top) || self.getBrightness(LightLayer.BLOCK, top) >= 10) {
                 continue;
@@ -227,8 +240,12 @@ public class ServerLevelMixin {
                 }
                 continue;
             }
-            BlockPos placePos = self.getBlockState(top).is(Blocks.SNOW) ? top : (self.getBlockState(top).isAir() ? top : null);
-            if (placePos == null) {
+            BlockPos placePos;
+            if (belowState.is(Blocks.SNOW) && belowState.getValue(SnowLayerBlock.LAYERS) < 8) {
+                placePos = below;
+            } else if (self.getBlockState(top).is(Blocks.SNOW) || self.getBlockState(top).isAir()) {
+                placePos = top;
+            } else {
                 continue;
             }
             int snowBelow = 0;

@@ -24,7 +24,9 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
+import java.util.LinkedHashMap;
 import java.util.Locale;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -49,6 +51,15 @@ public final class RealWeatherService {
     private static volatile String overrideMode = "auto";
     private static volatile long overrideTicksRemaining = -1L;
     private static volatile boolean tickingOverworld = true;
+
+    private static final int MAX_TRAMPLED_COLUMNS = 512;
+    private static final long TRAMPLE_COOLDOWN_TICKS = 12000L;
+    private static final Map<Long, Long> TRAMPLED_COLUMNS = new LinkedHashMap<>(64, 0.75F, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<Long, Long> eldest) {
+            return size() > MAX_TRAMPLED_COLUMNS;
+        }
+    };
 
     private static String cachedCityKey = null;
     private static String resolvedLabel = "Lviv";
@@ -101,14 +112,36 @@ public final class RealWeatherService {
 
     public static int getSnowDepthTargetLayers() {
         if (!WinterConfig.ENABLED.get() || !WinterConfig.REAL_WEATHER_ENABLED.get()
-                || !WinterConfig.SYNC_SNOW_DEPTH.get() || isVanillaWeatherMode()) {
+                || !WinterConfig.SYNC_SNOW_DEPTH.get() || isVanillaWeatherMode() || shouldUseRain()) {
             return 0;
         }
-        if (currentSnowDepthM < 0.005 || currentTempC > WinterConfig.WET_SNOW_MAX_TEMPERATURE_C.get()) {
+        if (currentSnowDepthM < 0.005 || currentTempC > WinterConfig.MELT_TEMPERATURE_C.get()) {
             return 0;
         }
         int maxLayers = WinterConfig.MAX_SNOW_BLOCKS.get() * 8;
         return Math.max(1, Math.min(maxLayers, (int) Math.round(currentSnowDepthM * 24.0)));
+    }
+
+    public static void markColumnTrampled(int x, int z, long gameTime) {
+        long key = (((long) x) << 32) | (z & 0xFFFFFFFFL);
+        synchronized (TRAMPLED_COLUMNS) {
+            TRAMPLED_COLUMNS.put(key, gameTime + TRAMPLE_COOLDOWN_TICKS);
+        }
+    }
+
+    public static boolean isColumnTrampled(int x, int z, long gameTime) {
+        long key = (((long) x) << 32) | (z & 0xFFFFFFFFL);
+        synchronized (TRAMPLED_COLUMNS) {
+            Long until = TRAMPLED_COLUMNS.get(key);
+            if (until == null) {
+                return false;
+            }
+            if (gameTime >= until) {
+                TRAMPLED_COLUMNS.remove(key);
+                return false;
+            }
+            return true;
+        }
     }
 
     public static boolean forceSync() {
@@ -287,6 +320,9 @@ public final class RealWeatherService {
         overrideTicksRemaining = -1L;
         tickingOverworld = true;
         ticksUntilNextFetch = 20L;
+        synchronized (TRAMPLED_COLUMNS) {
+            TRAMPLED_COLUMNS.clear();
+        }
         SeasonCompat.resetCache();
         if (WinterConfig.ENABLED.get() && WinterConfig.REAL_WEATHER_ENABLED.get()) {
             server.overworld().setWeatherParameters(1200, 0, false, false);

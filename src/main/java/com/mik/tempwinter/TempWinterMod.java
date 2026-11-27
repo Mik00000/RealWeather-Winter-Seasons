@@ -189,6 +189,7 @@ public class TempWinterMod {
         if (layers >= 2) {
             level.setBlockAndUpdate(snowPos, state.setValue(SnowLayerBlock.LAYERS, layers - 1));
             level.playSound(null, snowPos, SoundEvents.SNOW_STEP, SoundSource.BLOCKS, 0.35F, 0.9F);
+            RealWeatherService.markColumnTrampled(snowPos.getX(), snowPos.getZ(), level.getGameTime());
         }
     }
 
