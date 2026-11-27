@@ -69,26 +69,29 @@ public final class WinterClientEvents {
         double baseTempC = ClientWeatherState.isActive() ? ClientWeatherState.getTempC() : -1.0;
         double tempC = RealWeatherService.getEffectiveTempC(baseTempC, player.getBlockY());
         double windKmh = ClientWeatherState.isActive() ? ClientWeatherState.getWindKmh() : 0.0;
+        float intensity = ClientWeatherState.isActive() ? ClientWeatherState.getIntensity() : 0.6F;
         boolean isSnowingOutdoors = !ClientWeatherState.isRain()
-                && level.getRainLevel(1.0F) > 0.2F
+                && tempC <= WinterConfig.WET_SNOW_MAX_TEMPERATURE_C.get()
+                && level.getRainLevel(1.0F) > 0.05F
                 && level.canSeeSky(player.blockPosition());
 
         double windThreshold = WinterConfig.BLIZZARD_WIND_THRESHOLD_KMH.get();
-        if (isSnowingOutdoors && windKmh >= windThreshold && WinterConfig.GROUND_BLIZZARD_PARTICLES.get()
+        if (isSnowingOutdoors && WinterConfig.GROUND_BLIZZARD_PARTICLES.get()
                 && !ShaderAndModCompat.hasExternalWinterParticles()
                 && !ShaderAndModCompat.hasParticleRain()) {
-            int flakes = windKmh >= windThreshold + 15.0 ? 5 : 3;
+            boolean blizzard = windKmh >= windThreshold;
+            int flakes = blizzard
+                    ? (windKmh >= windThreshold + 15.0 ? 7 : 5)
+                    : Math.max(2, Math.round(intensity * 6.0F));
+            double windDrift = blizzard ? (0.08 + rand.nextDouble() * 0.06) : (windKmh / 250.0);
             for (int i = 0; i < flakes; i++) {
-                double px = player.getX() + (rand.nextDouble() - 0.5) * 18.0;
-                double py = player.getY() + rand.nextDouble() * 3.0;
-                double pz = player.getZ() + (rand.nextDouble() - 0.5) * 18.0;
-                level.addParticle(
-                        ParticleTypes.SNOWFLAKE,
-                        px, py, pz,
-                        0.08 + rand.nextDouble() * 0.06,
-                        -0.02 - rand.nextDouble() * 0.02,
-                        0.03 + (rand.nextDouble() - 0.5) * 0.04
-                );
+                double px = player.getX() + (rand.nextDouble() - 0.5) * 20.0;
+                double py = player.getY() + (blizzard ? rand.nextDouble() * 4.0 : (rand.nextDouble() * 8.0 - 0.5));
+                double pz = player.getZ() + (rand.nextDouble() - 0.5) * 20.0;
+                double vx = windDrift + (rand.nextDouble() - 0.5) * 0.025;
+                double vy = blizzard ? (-0.02 - rand.nextDouble() * 0.025) : (-0.04 - rand.nextDouble() * 0.035);
+                double vz = (blizzard ? 0.03 : windDrift * 0.4) + (rand.nextDouble() - 0.5) * 0.03;
+                level.addParticle(ParticleTypes.SNOWFLAKE, px, py, pz, vx, vy, vz);
             }
         }
 
