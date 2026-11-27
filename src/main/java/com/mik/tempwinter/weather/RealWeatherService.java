@@ -20,8 +20,11 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashMap;
@@ -65,6 +68,7 @@ public final class RealWeatherService {
     private static String resolvedLabel = "Lviv";
     private static double resolvedLat = 49.8397;
     private static double resolvedLon = 24.0297;
+    private static volatile int resolvedUtcOffsetSeconds = ZoneId.systemDefault().getRules().getOffset(Instant.now()).getTotalSeconds();
     private static long ticksUntilNextFetch = 20L;
 
     private record PendingUpdate(float intensity, double tempC, double windKmh, double snowDepthM, boolean rainOnly, boolean thunder, String summary) {
@@ -97,13 +101,18 @@ public final class RealWeatherService {
     }
 
     public static boolean canMeltSnow() {
+        return canMeltSnow(64);
+    }
+
+    public static boolean canMeltSnow(int y) {
         if (!WinterConfig.ENABLED.get() || !WinterConfig.REAL_WEATHER_ENABLED.get() || !WinterConfig.MELT_WHEN_WARM.get()) {
             return false;
         }
-        if (shouldUseRain() && currentTempC > WinterConfig.FREEZE_TEMPERATURE_C.get()) {
+        double effectiveTempC = getEffectiveTempC(currentTempC, y);
+        if (shouldUseRain(y) && effectiveTempC > WinterConfig.FREEZE_TEMPERATURE_C.get()) {
             return true;
         }
-        return currentTempC > WinterConfig.MELT_TEMPERATURE_C.get();
+        return effectiveTempC > WinterConfig.MELT_TEMPERATURE_C.get();
     }
 
     public static double getSnowDepthMeters() {
@@ -111,11 +120,16 @@ public final class RealWeatherService {
     }
 
     public static int getSnowDepthTargetLayers() {
+        return getSnowDepthTargetLayers(64);
+    }
+
+    public static int getSnowDepthTargetLayers(int y) {
         if (!WinterConfig.ENABLED.get() || !WinterConfig.REAL_WEATHER_ENABLED.get()
-                || !WinterConfig.SYNC_SNOW_DEPTH.get() || isVanillaWeatherMode() || shouldUseRain()) {
+                || !WinterConfig.SYNC_SNOW_DEPTH.get() || isVanillaWeatherMode() || shouldUseRain(y)) {
             return 0;
         }
-        if (currentSnowDepthM < 0.005 || currentTempC > WinterConfig.MELT_TEMPERATURE_C.get()) {
+        double effectiveTempC = getEffectiveTempC(currentTempC, y);
+        if (currentSnowDepthM < 0.005 || effectiveTempC > WinterConfig.MELT_TEMPERATURE_C.get()) {
             return 0;
         }
         int maxLayers = WinterConfig.MAX_SNOW_BLOCKS.get() * 8;
@@ -283,11 +297,15 @@ public final class RealWeatherService {
     }
 
     public static boolean shouldUseRain() {
+        return shouldUseRain(64);
+    }
+
+    public static boolean shouldUseRain(int y) {
         if (!WinterConfig.REAL_WEATHER_ENABLED.get()) {
             return false;
         }
         return (currentHasRainOnly || currentThunder)
-                && currentTempC > WinterConfig.WET_SNOW_MAX_TEMPERATURE_C.get();
+                && getEffectiveTempC(currentTempC, y) > WinterConfig.WET_SNOW_MAX_TEMPERATURE_C.get();
     }
 
     public static boolean canFreezeWater() {
@@ -315,6 +333,7 @@ public final class RealWeatherService {
         currentHasRainOnly = false;
         currentThunder = false;
         cachedCityKey = null;
+        resolvedUtcOffsetSeconds = ZoneId.systemDefault().getRules().getOffset(Instant.now()).getTotalSeconds();
         pendingUpdate = null;
         overrideMode = "auto";
         overrideTicksRemaining = -1L;
@@ -347,7 +366,9 @@ public final class RealWeatherService {
         }
 
         if (WinterConfig.SYNC_REAL_TIME.get() && !isVanillaWeatherMode() && server.getTickCount() % 20 == 0) {
-            LocalTime now = LocalTime.now().plusHours(WinterConfig.WEATHER_TIME_OFFSET_HOURS.get());
+            ZoneOffset cityZone = ZoneOffset.ofTotalSeconds(resolvedUtcOffsetSeconds);
+            LocalTime now = Instant.now().atOffset(cityZone).toLocalTime()
+                    .plusHours(WinterConfig.WEATHER_TIME_OFFSET_HOURS.get());
             long sec = now.toSecondOfDay();
             long mcTimeOfDay = ((sec - 21600L + 86400L) % 86400L) * 24000L / 86400L;
             ServerLevel overworld = server.overworld();
@@ -435,7 +456,7 @@ public final class RealWeatherService {
             String url = offsetHours == 0
                     ? String.format(
                             Locale.ROOT,
-                            "https://api.open-meteo.com/v1/forecast?latitude=%.4f&longitude=%.4f&current=temperature_2m,precipitation,rain,snowfall,snow_depth,cloud_cover,weather_code,wind_speed_10m",
+                            "https://api.open-meteo.com/v1/forecast?latitude=%.4f&longitude=%.4f&current=temperature_2m,precipitation,rain,snowfall,snow_depth,cloud_cover,weather_code,wind_speed_10m&timezone=auto",
                             resolvedLat, resolvedLon)
                     : String.format(
                             Locale.ROOT,
@@ -452,6 +473,9 @@ public final class RealWeatherService {
                 return null;
             }
             JsonObject root = GSON.fromJson(resp.body(), JsonObject.class);
+            if (root.has("utc_offset_seconds") && !root.get("utc_offset_seconds").isJsonNull()) {
+                resolvedUtcOffsetSeconds = root.get("utc_offset_seconds").getAsInt();
+            }
             JsonObject cur = root.getAsJsonObject("current");
             double tempC;
             double precip;
@@ -504,7 +528,7 @@ public final class RealWeatherService {
         if (times == null || times.isEmpty()) {
             return -1;
         }
-        LocalDateTime target = LocalDateTime.parse(currentIso).plusHours(offsetHours).truncatedTo(ChronoUnit.HOURS);
+        LocalDateTime target = LocalDateTime.parse(currentIso).plusHours(offsetHours).plusMinutes(30).truncatedTo(ChronoUnit.HOURS);
         String targetStr = target.format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:00"));
         for (int i = 0; i < times.size(); i++) {
             if (targetStr.equals(times.get(i).getAsString())) {

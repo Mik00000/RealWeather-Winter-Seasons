@@ -119,7 +119,7 @@ public class TempWinterMod {
                             RealWeatherService.shouldUseRain(),
                             RealWeatherService.getCurrentTempC(),
                             RealWeatherService.getCurrentWindKmh(),
-                            SeasonCompat.isWinterActive(player.level())
+                            !RealWeatherService.isVanillaWeatherMode() && SeasonCompat.isWinterActive(player.level())
                     )
             );
         }
@@ -229,6 +229,9 @@ public class TempWinterMod {
             return;
         }
         if (!(event.getEntity() instanceof ServerPlayer player) || !player.getMainHandItem().isEmpty()) {
+            return;
+        }
+        if (!player.getOffhandItem().isEmpty() && !player.isShiftKeyDown()) {
             return;
         }
         Level level = event.getLevel();

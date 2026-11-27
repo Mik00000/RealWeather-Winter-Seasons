@@ -73,11 +73,21 @@ public final class SeasonCompat {
         } else if ("RESPECT_SEASONS".equals(behavior)) {
             String season = getModSeasonName(level);
             active = season != null ? "WINTER".equalsIgnoreCase(season) : isRealDateWinter();
-        } else if (hasSeasonMod()) {
-            String season = getModSeasonName(level);
-            active = season != null ? "WINTER".equalsIgnoreCase(season) : isRealDateWinter();
         } else {
-            active = isRealDateWinter();
+            String season = hasSeasonMod() ? getModSeasonName(level) : null;
+            boolean calendarWinter = season != null ? "WINTER".equalsIgnoreCase(season) : isRealDateWinter();
+            if (WinterConfig.REAL_WEATHER_ENABLED.get() && !RealWeatherService.isVanillaWeatherMode()) {
+                double tempC = RealWeatherService.getCurrentTempC();
+                if (tempC <= WinterConfig.WET_SNOW_MAX_TEMPERATURE_C.get()) {
+                    active = true;
+                } else if (tempC > WinterConfig.MELT_TEMPERATURE_C.get() + 5.5) {
+                    active = false;
+                } else {
+                    active = calendarWinter;
+                }
+            } else {
+                active = calendarWinter;
+            }
         }
         serverIsWinter = active;
         return active;

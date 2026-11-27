@@ -61,7 +61,7 @@ public final class WinterClientEvents {
         }
         boolean inOverworld = level.dimension().equals(Level.OVERWORLD);
         ClientWeatherState.setInOverworld(inOverworld);
-        if (!inOverworld) {
+        if (!inOverworld || (WinterConfig.REAL_WEATHER_ENABLED.get() && ClientWeatherState.isExplicitlyDisabled())) {
             return;
         }
 
@@ -170,7 +170,8 @@ public final class WinterClientEvents {
     private static void onLeftClickBlock(PlayerInteractEvent.LeftClickBlock event) {
         if (!event.getLevel().isClientSide() || !event.getLevel().dimension().equals(Level.OVERWORLD)
                 || !WinterConfig.ENABLED.get() || !WinterConfig.TREE_SHAKE_SNOW.get()
-                || ShaderAndModCompat.hasExternalWinterParticles()) {
+                || ShaderAndModCompat.hasExternalWinterParticles()
+                || (WinterConfig.REAL_WEATHER_ENABLED.get() && ClientWeatherState.isExplicitlyDisabled())) {
             return;
         }
         double tempC = ClientWeatherState.isActive() ? ClientWeatherState.getTempC() : -1.0;
@@ -209,6 +210,7 @@ public final class WinterClientEvents {
 
     private static boolean shouldApplyWinterFog(ViewportEvent event) {
         if (!WinterConfig.ENABLED.get() || !WinterConfig.WINTER_FOG.get()
+                || (WinterConfig.REAL_WEATHER_ENABLED.get() && ClientWeatherState.isExplicitlyDisabled())
                 || ShaderAndModCompat.hasExternalFogMod() || ShaderAndModCompat.hasParticleRain()) {
             return false;
         }

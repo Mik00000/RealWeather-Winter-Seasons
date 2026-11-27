@@ -16,7 +16,10 @@ public class BiomeClientMixin {
         if (!WinterConfig.ENABLED.get() || !ClientWeatherState.isInOverworld()) {
             return false;
         }
-        return !ClientWeatherState.isActive() || ClientWeatherState.isWinterSeasonActive();
+        if (!ClientWeatherState.hasReceivedSync()) {
+            return true;
+        }
+        return ClientWeatherState.isWinterSeasonActive();
     }
 
     @Inject(method = "getGrassColor(DD)I", at = @At("HEAD"), cancellable = true, require = 0)

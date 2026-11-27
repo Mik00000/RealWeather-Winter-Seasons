@@ -4,6 +4,7 @@ package com.mik.tempwinter.weather;
  * Holds client-side real-weather snowfall/rain intensity and type synced from the server.
  */
 public final class ClientWeatherState {
+    private static volatile boolean synced = false;
     private static volatile boolean active = false;
     private static volatile float intensity = 1.0F;
     private static volatile boolean isRain = false;
@@ -16,12 +17,21 @@ public final class ClientWeatherState {
     }
 
     public static void update(boolean isActive, float newIntensity, boolean rain, double temperatureC, double windSpeedKmh, boolean winterSeason) {
+        synced = true;
         active = isActive;
         intensity = Math.max(0.0F, Math.min(1.0F, newIntensity));
         isRain = rain;
         tempC = temperatureC;
         windKmh = windSpeedKmh;
         winterSeasonActive = winterSeason;
+    }
+
+    public static boolean hasReceivedSync() {
+        return synced;
+    }
+
+    public static boolean isExplicitlyDisabled() {
+        return synced && !active;
     }
 
     public static boolean isActive() {
@@ -57,6 +67,7 @@ public final class ClientWeatherState {
     }
 
     public static void reset() {
+        synced = false;
         active = false;
         intensity = 1.0F;
         isRain = false;

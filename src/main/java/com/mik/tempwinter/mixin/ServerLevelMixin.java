@@ -221,8 +221,9 @@ public class ServerLevelMixin {
         int x = chunk.getPos().getMinBlockX() + self.random.nextInt(16);
         int z = chunk.getPos().getMinBlockZ() + self.random.nextInt(16);
         BlockPos top = self.getHeightmapPos(Heightmap.Types.MOTION_BLOCKING, new BlockPos(x, 0, z));
+        boolean warmMeltAtTop = RealWeatherService.canMeltSnow(top.getY());
         boolean nearHeat = heatMelt && HeatSourceHelper.hasHeatNearby(self, top, WinterConfig.HEAT_SOURCE_RADIUS.get());
-        if (!warmMelt && !nearHeat) {
+        if (!warmMeltAtTop && !nearHeat) {
             return;
         }
 
@@ -232,8 +233,9 @@ public class ServerLevelMixin {
         if (snowPos != null) {
             BlockState state = self.getBlockState(snowPos);
             int layers = state.getValue(SnowLayerBlock.LAYERS);
-            if (!nearHeat && !RealWeatherService.shouldUseRain() && RealWeatherService.getCurrentTempC() <= 2.5) {
-                int floor = RealWeatherService.getSnowDepthTargetLayers();
+            double effectiveTempC = RealWeatherService.getEffectiveTempC(RealWeatherService.getCurrentTempC(), snowPos.getY());
+            if (!nearHeat && !RealWeatherService.shouldUseRain(snowPos.getY()) && effectiveTempC <= WinterConfig.MELT_TEMPERATURE_C.get() + 1.0) {
+                int floor = RealWeatherService.getSnowDepthTargetLayers(snowPos.getY());
                 int snowBelow = 0;
                 BlockPos cursor = snowPos.below();
                 while (snowBelow < WinterConfig.MAX_SNOW_BLOCKS.get() && self.getBlockState(cursor).is(Blocks.SNOW)) {
@@ -263,13 +265,10 @@ public class ServerLevelMixin {
         if (self.random.nextInt(4) != 0) {
             return;
         }
-        int snowDepthTarget = RealWeatherService.getSnowDepthTargetLayers();
-        if (snowDepthTarget <= 0 || !WinterConfig.PLACE_SNOW_BLOCKS.get()) {
+        if (!WinterConfig.PLACE_SNOW_BLOCKS.get() || RealWeatherService.getSnowDepthTargetLayers(320) <= 0) {
             return;
         }
-        if (!SeasonCompat.isServerWinterActive() && RealWeatherService.getCurrentTempC() > WinterConfig.MELT_TEMPERATURE_C.get()) {
-            return;
-        }
+        boolean winterActive = SeasonCompat.isServerWinterActive();
         int maxBlocks = WinterConfig.MAX_SNOW_BLOCKS.get();
         int minX = chunk.getPos().getMinBlockX();
         int minZ = chunk.getPos().getMinBlockZ();
@@ -282,6 +281,13 @@ public class ServerLevelMixin {
             }
             BlockPos top = self.getHeightmapPos(Heightmap.Types.MOTION_BLOCKING, new BlockPos(x, 0, z));
             if (!self.canSeeSky(top) || self.getBrightness(LightLayer.BLOCK, top) >= 10) {
+                continue;
+            }
+            int snowDepthTarget = RealWeatherService.getSnowDepthTargetLayers(top.getY());
+            if (snowDepthTarget <= 0) {
+                continue;
+            }
+            if (!winterActive && RealWeatherService.getEffectiveTempC(RealWeatherService.getCurrentTempC(), top.getY()) > WinterConfig.MELT_TEMPERATURE_C.get()) {
                 continue;
             }
             BlockPos below = top.below();
@@ -345,14 +351,17 @@ public class ServerLevelMixin {
             if (!RealWeatherService.isColumnTrampled(ux, uz, gameTime)) {
                 BlockPos skyTop = self.getHeightmapPos(Heightmap.Types.MOTION_BLOCKING, new BlockPos(ux, 0, uz));
                 BlockPos underTop = self.getHeightmapPos(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, new BlockPos(ux, 0, uz));
-                if (underTop.getY() < skyTop.getY()
+                int underTarget = RealWeatherService.getSnowDepthTargetLayers(underTop.getY());
+                if (underTarget > 0
+                        && underTop.getY() < skyTop.getY()
+                        && (winterActive || RealWeatherService.getEffectiveTempC(RealWeatherService.getCurrentTempC(), underTop.getY()) <= WinterConfig.MELT_TEMPERATURE_C.get())
                         && self.getBrightness(LightLayer.BLOCK, underTop) < 10
                         && tempwinter$onlyLeavesAbove(self, underTop, skyTop)
                         && (!WinterConfig.HEAT_MELTS_SNOW.get() || !HeatSourceHelper.hasHeatNearby(self, underTop, WinterConfig.HEAT_SOURCE_RADIUS.get()))) {
                     BlockState atUnder = self.getBlockState(underTop);
                     if (atUnder.isAir() && Blocks.SNOW.defaultBlockState().canSurvive(self, underTop)) {
                         self.setBlockAndUpdate(underTop, Blocks.SNOW.defaultBlockState());
-                    } else if (atUnder.is(Blocks.SNOW) && atUnder.getValue(SnowLayerBlock.LAYERS) < 2 && snowDepthTarget >= 2) {
+                    } else if (atUnder.is(Blocks.SNOW) && atUnder.getValue(SnowLayerBlock.LAYERS) < 2 && underTarget >= 2) {
                         self.setBlockAndUpdate(underTop, atUnder.setValue(SnowLayerBlock.LAYERS, 2));
                     }
                 }
