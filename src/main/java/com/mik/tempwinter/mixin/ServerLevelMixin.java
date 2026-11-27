@@ -81,9 +81,7 @@ public class ServerLevelMixin {
         if (!self.dimension().equals(Level.OVERWORLD)) {
             return original;
         }
-        if (WinterConfig.YIELD_TO_SNOW_REAL_MAGIC.get() && ShaderAndModCompat.hasSnowRealMagic()) {
-            return original;
-        }
+        boolean yieldToSrm = WinterConfig.YIELD_TO_SNOW_REAL_MAGIC.get() && ShaderAndModCompat.hasSnowRealMagic();
         if (WinterConfig.REAL_WEATHER_ENABLED.get()) {
             float intensity = RealWeatherService.getIntensity();
             if (intensity <= 0.01F || (intensity < 1.0F && self.random.nextFloat() > intensity)) {
@@ -105,6 +103,9 @@ public class ServerLevelMixin {
         int curLayers = self.getBlockState(top).is(Blocks.SNOW)
                 ? self.getBlockState(top).getValue(SnowLayerBlock.LAYERS)
                 : (self.getBlockState(top.below()).is(Blocks.SNOW) ? self.getBlockState(top.below()).getValue(SnowLayerBlock.LAYERS) : 0);
+        if (snowBelow * 8 + curLayers >= capLayers) {
+            return 0;
+        }
         if (WinterConfig.SMOOTH_DRIFTS.get() && (snowBelow > 0 || curLayers >= 3)) {
             BlockPos checkPos = self.getBlockState(top.below()).is(Blocks.SNOW) && self.getBlockState(top.below()).getValue(SnowLayerBlock.LAYERS) < 8 ? top.below() : top;
             if (tempwinter$shouldWaitForNeighbors(self, checkPos, curLayers, snowBelow)) {
@@ -112,7 +113,13 @@ public class ServerLevelMixin {
             }
         }
         int remaining = capLayers - snowBelow * 8;
-        return remaining <= 0 ? 0 : Math.min(8, remaining);
+        if (remaining <= 0) {
+            return 0;
+        }
+        if (yieldToSrm) {
+            return Math.min(original, remaining);
+        }
+        return Math.min(8, remaining);
     }
 
     @Unique
@@ -258,9 +265,6 @@ public class ServerLevelMixin {
         }
         int snowDepthTarget = RealWeatherService.getSnowDepthTargetLayers();
         if (snowDepthTarget <= 0 || !WinterConfig.PLACE_SNOW_BLOCKS.get()) {
-            return;
-        }
-        if (WinterConfig.YIELD_TO_SNOW_REAL_MAGIC.get() && ShaderAndModCompat.hasSnowRealMagic()) {
             return;
         }
         if (!SeasonCompat.isServerWinterActive() && RealWeatherService.getCurrentTempC() > WinterConfig.MELT_TEMPERATURE_C.get()) {

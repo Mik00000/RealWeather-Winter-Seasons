@@ -54,7 +54,7 @@ No hard dependencies. Optional runtime compatibility is built in for:
 - **Seasons (`Serene Seasons`, `Ecliptic Seasons`, `Fabric Seasons`):** Default `seasonsBehavior = "SYNC_REAL_DATE"` syncs seasons to the real calendar and hemisphere (`RESPECT_SEASONS` and `OVERRIDE` also available).
 - **Temperature Survival (`Cold Sweat`, `Tough As Nails`, `Legendary Survival Overhaul`, `Homeostatic`):** Provides clean base ambient temperature via `Biome.getBaseTemperature()` and TAN's positional modifier, yielding the screen frost overlay.
 - **HUD & Tooltips (`Jade`):** Native snow/ice temperature & fragile ice tooltips + `F3` debug weather line.
-- **Atmosphere & Weather (`Particle Rain`, `Snow! Real Magic!`, `Immersive Weathering: Renewed`, `AmbientSounds 6`, `Fog`, `WinterParticles`, `Breath.`, `Simple Clouds`, `Weather2`, `The Weather Update`, `LocalizedWeather`):** Automatically yields overlapping fog, particles, wind sounds, snow placement, or storm loops.
+- **Atmosphere & Weather (`Particle Rain`, `Snow! Real Magic!`, `Immersive Weathering: Renewed`, `AmbientSounds 6`, `Fog`, `WinterParticles`, `Breath.`, `Simple Clouds`, `Weather2`, `The Weather Update`, `LocalizedWeather`):** Yields overlapping fog, particles, wind sounds, or storm loops automatically; with `Snow! Real Magic!`, live snowlogging on stairs/fences/plants stays in SRM while RealWeather keeps `snow_depth` cover, smooth drifts, heat/Create protections, and IRL melt temperature active.
 
 ## Configuration
 

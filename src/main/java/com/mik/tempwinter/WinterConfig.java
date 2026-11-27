@@ -242,7 +242,7 @@ public final class WinterConfig {
                 .comment("Yield weather cycle control if Simple Clouds, Weather2, The Weather Update, or LocalizedWeather is installed.")
                 .define("yieldToWeatherMods", true);
         YIELD_TO_SNOW_REAL_MAGIC = builder
-                .comment("Yield snow layer placement cap to Snow! Real Magic! if installed (so slabs/stairs/fences accumulate snow via SRM).")
+                .comment("Yield live snowfall layer cap when Snow! Real Magic! is installed (so slabs/stairs/fences/plants snowlog via SRM) while keeping protections, snow_depth cover, smooth drifts, and melt active.")
                 .define("yieldToSnowRealMagic", true);
         builder.pop();
 

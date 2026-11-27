@@ -1,6 +1,7 @@
 package com.mik.tempwinter.mixin;
 
 import com.mik.tempwinter.WinterConfig;
+import com.mik.tempwinter.client.ShaderAndModCompat;
 import com.mik.tempwinter.compat.SeasonCompat;
 import com.mik.tempwinter.compat.TemperatureModCompat;
 import com.mik.tempwinter.weather.ClientWeatherState;
@@ -63,7 +64,9 @@ public class BiomeMixin {
         if (!"Server thread".equals(thread) && !"Render thread".equals(thread)) {
             return;
         }
-        if (!TemperatureModCompat.hasExternalTemperatureMod() && !tempwinter$isWinterOrCold(64)) {
+        if (!TemperatureModCompat.hasExternalTemperatureMod()
+                && !(ShaderAndModCompat.hasSnowRealMagic() && RealWeatherService.canMeltSnow())
+                && !tempwinter$isWinterOrCold(64)) {
             return;
         }
         double tempC = (FMLEnvironment.dist == Dist.CLIENT && ClientWeatherState.isActive())
