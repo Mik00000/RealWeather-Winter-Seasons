@@ -601,8 +601,8 @@ public final class RealWeatherService {
 
     private static void resolveLocation(String city, double fallbackLat, double fallbackLon) {
         if (city.equalsIgnoreCase("auto") || city.isEmpty()) {
-            if (tryIpApi("https://ipapi.co/json/", false)
-                    || tryIpApi("http://ip-api.com/json/?fields=status,city,lat,lon", true)) {
+            if (tryIpApi("http://ip-api.com/json/?fields=status,city,lat,lon", true)
+                    || tryIpApi("https://ipapi.co/json/", false)) {
                 cachedCityKey = city;
                 return;
             }
@@ -636,7 +636,8 @@ public final class RealWeatherService {
                 resolvedLon = obj.get("lon").getAsDouble();
                 resolvedLabel = obj.has("city") ? obj.get("city").getAsString() + " (IP)" : "Auto-IP";
                 return true;
-            } else if (obj.has("latitude") && obj.has("longitude")) {
+            } else if (!obj.has("error") && obj.has("latitude") && obj.has("longitude")
+                    && !obj.get("latitude").isJsonNull() && !obj.get("longitude").isJsonNull()) {
                 resolvedLat = obj.get("latitude").getAsDouble();
                 resolvedLon = obj.get("longitude").getAsDouble();
                 resolvedLabel = obj.has("city") ? obj.get("city").getAsString() + " (IP)" : "Auto-IP";
