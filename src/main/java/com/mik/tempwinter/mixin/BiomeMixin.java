@@ -22,7 +22,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public class BiomeMixin {
     @Inject(method = "hasPrecipitation()Z", at = @At("HEAD"), cancellable = true)
     private void tempwinter$hasPrecipitation(CallbackInfoReturnable<Boolean> cir) {
-        if (WinterConfig.ENABLED.get() && WinterConfig.FORCE_SNOWFALL.get()
+        if (WinterConfig.isEnabled() && WinterConfig.FORCE_SNOWFALL.get()
                 && tempwinter$isOverworld() && !tempwinter$isVanillaMode() && tempwinter$isWinterOrCold()) {
             cir.setReturnValue(true);
         }
@@ -30,7 +30,7 @@ public class BiomeMixin {
 
     @Inject(method = "getPrecipitationAt(Lnet/minecraft/core/BlockPos;)Lnet/minecraft/world/level/biome/Biome$Precipitation;", at = @At("HEAD"), cancellable = true)
     private void tempwinter$getPrecipitationAt(BlockPos pos, CallbackInfoReturnable<Biome.Precipitation> cir) {
-        if (WinterConfig.ENABLED.get() && WinterConfig.FORCE_SNOWFALL.get()
+        if (WinterConfig.isEnabled() && WinterConfig.FORCE_SNOWFALL.get()
                 && tempwinter$isOverworld() && !tempwinter$isVanillaMode() && tempwinter$isWinterOrCold(pos.getY())) {
             cir.setReturnValue(tempwinter$isRainMode(pos.getY()) ? Biome.Precipitation.RAIN : Biome.Precipitation.SNOW);
         }
@@ -38,7 +38,7 @@ public class BiomeMixin {
 
     @Inject(method = "coldEnoughToSnow(Lnet/minecraft/core/BlockPos;)Z", at = @At("HEAD"), cancellable = true)
     private void tempwinter$coldEnoughToSnow(BlockPos pos, CallbackInfoReturnable<Boolean> cir) {
-        if (WinterConfig.ENABLED.get() && WinterConfig.FORCE_SNOWFALL.get()
+        if (WinterConfig.isEnabled() && WinterConfig.FORCE_SNOWFALL.get()
                 && tempwinter$isOverworld() && !tempwinter$isVanillaMode() && tempwinter$isWinterOrCold(pos.getY())) {
             cir.setReturnValue(!tempwinter$isRainMode(pos.getY()));
         }
@@ -49,14 +49,14 @@ public class BiomeMixin {
         if (level instanceof Level lvl && !lvl.dimension().equals(Level.OVERWORLD)) {
             return;
         }
-        if (WinterConfig.ENABLED.get() && !tempwinter$isVanillaMode() && (!WinterConfig.PLACE_SNOW_BLOCKS.get() || !RealWeatherService.canFreezeWater())) {
+        if (WinterConfig.isEnabled() && !tempwinter$isVanillaMode() && (!WinterConfig.PLACE_SNOW_BLOCKS.get() || !RealWeatherService.canFreezeWater())) {
             cir.setReturnValue(false);
         }
     }
 
     @Inject(method = "getBaseTemperature()F", at = @At("HEAD"), cancellable = true)
     private void tempwinter$ambientBaseTemperature(CallbackInfoReturnable<Float> cir) {
-        if (!WinterConfig.ENABLED.get() || !WinterConfig.REAL_WEATHER_ENABLED.get()
+        if (!WinterConfig.isEnabled() || !WinterConfig.REAL_WEATHER_ENABLED.get()
                 || !WinterConfig.AMBIENT_BIOME_TEMPERATURE.get() || !tempwinter$isOverworld() || tempwinter$isVanillaMode()) {
             return;
         }

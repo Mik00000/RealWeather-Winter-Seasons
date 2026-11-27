@@ -111,7 +111,7 @@ public class TempWinterMod {
     }
 
     private void onPlayerLogin(PlayerEvent.PlayerLoggedInEvent event) {
-        if (event.getEntity() instanceof ServerPlayer player) {
+        if (event.getEntity() instanceof ServerPlayer player && WinterConfig.isLoaded()) {
             PacketDistributor.sendToPlayer(
                     player,
                     new WinterWeatherPayload(
@@ -128,7 +128,7 @@ public class TempWinterMod {
 
     private void onPlayerTick(PlayerTickEvent.Post event) {
         if (!(event.getEntity() instanceof ServerPlayer player)
-                || !WinterConfig.ENABLED.get()
+                || !WinterConfig.isEnabled()
                 || player.isSpectator()) {
             return;
         }
@@ -230,7 +230,7 @@ public class TempWinterMod {
     private void onRightClickBlock(PlayerInteractEvent.RightClickBlock event) {
         if (event.getLevel().isClientSide()
                 || event.getHand() != InteractionHand.MAIN_HAND
-                || !WinterConfig.ENABLED.get()
+                || !WinterConfig.isEnabled()
                 || !WinterConfig.SCOOP_SNOWBALLS.get()) {
             return;
         }

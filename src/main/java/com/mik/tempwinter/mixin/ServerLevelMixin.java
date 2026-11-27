@@ -31,7 +31,7 @@ public class ServerLevelMixin {
     private void tempwinter$disableVanillaWeatherCycle(CallbackInfo ci) {
         ServerLevel self = (ServerLevel) (Object) this;
         if (self.dimension().equals(Level.OVERWORLD)
-                && WinterConfig.ENABLED.get() && WinterConfig.REAL_WEATHER_ENABLED.get()
+                && WinterConfig.isEnabled() && WinterConfig.REAL_WEATHER_ENABLED.get()
                 && !RealWeatherService.isVanillaWeatherMode()
                 && !(WinterConfig.YIELD_TO_WEATHER_MODS.get() && ShaderAndModCompat.hasExternalWeatherMod())) {
             ci.cancel();
@@ -42,7 +42,7 @@ public class ServerLevelMixin {
     private void tempwinter$disableSleepWeatherReset(CallbackInfo ci) {
         ServerLevel self = (ServerLevel) (Object) this;
         if (self.dimension().equals(Level.OVERWORLD)
-                && WinterConfig.ENABLED.get() && WinterConfig.REAL_WEATHER_ENABLED.get()
+                && WinterConfig.isEnabled() && WinterConfig.REAL_WEATHER_ENABLED.get()
                 && !RealWeatherService.isVanillaWeatherMode()
                 && !(WinterConfig.YIELD_TO_WEATHER_MODS.get() && ShaderAndModCompat.hasExternalWeatherMod())) {
             ci.cancel();
@@ -52,7 +52,7 @@ public class ServerLevelMixin {
     @Inject(method = "tickPrecipitation(Lnet/minecraft/core/BlockPos;)V", at = @At("HEAD"), cancellable = true)
     private void tempwinter$gatePrecipitationBlocks(BlockPos pos, CallbackInfo ci) {
         ServerLevel self = (ServerLevel) (Object) this;
-        if (!self.dimension().equals(Level.OVERWORLD) || !WinterConfig.ENABLED.get() || RealWeatherService.isVanillaWeatherMode()) {
+        if (!self.dimension().equals(Level.OVERWORLD) || !WinterConfig.isEnabled() || RealWeatherService.isVanillaWeatherMode()) {
             return;
         }
         if (!WinterConfig.PLACE_SNOW_BLOCKS.get()) {
@@ -77,6 +77,9 @@ public class ServerLevelMixin {
         require = 0
     )
     private int tempwinter$unevenSnowCap(int original, BlockPos pos) {
+        if (!WinterConfig.isLoaded()) {
+            return original;
+        }
         if (!WinterConfig.ENABLED.get() || !WinterConfig.PLACE_SNOW_BLOCKS.get()) {
             return WinterConfig.ENABLED.get() ? 0 : original;
         }
@@ -203,7 +206,7 @@ public class ServerLevelMixin {
     @Inject(method = "tickChunk(Lnet/minecraft/world/level/chunk/LevelChunk;I)V", at = @At("TAIL"))
     private void tempwinter$syncGroundSnowAndMelt(LevelChunk chunk, int randomTickSpeed, CallbackInfo ci) {
         ServerLevel self = (ServerLevel) (Object) this;
-        if (!self.dimension().equals(Level.OVERWORLD) || !WinterConfig.ENABLED.get() || RealWeatherService.isVanillaWeatherMode()) {
+        if (!self.dimension().equals(Level.OVERWORLD) || !WinterConfig.isEnabled() || RealWeatherService.isVanillaWeatherMode()) {
             return;
         }
 

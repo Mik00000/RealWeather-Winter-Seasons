@@ -94,7 +94,7 @@ public final class SeasonCompat {
     }
 
     public static void syncRealSeasonIfNeeded(MinecraftServer server) {
-        if (!WinterConfig.ENABLED.get() || !"SYNC_REAL_DATE".equalsIgnoreCase(WinterConfig.SEASONS_BEHAVIOR.get())) {
+        if (!WinterConfig.isEnabled() || !"SYNC_REAL_DATE".equalsIgnoreCase(WinterConfig.SEASONS_BEHAVIOR.get())) {
             return;
         }
         if (!SERENE_LOADED) {

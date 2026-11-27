@@ -352,7 +352,7 @@ public final class RealWeatherService {
             TRAMPLED_COLUMNS.clear();
         }
         SeasonCompat.resetCache();
-        if (WinterConfig.ENABLED.get() && WinterConfig.REAL_WEATHER_ENABLED.get()) {
+        if (WinterConfig.isEnabled() && WinterConfig.REAL_WEATHER_ENABLED.get()) {
             server.overworld().setWeatherParameters(1200, 0, false, false);
         }
     }
@@ -363,7 +363,7 @@ public final class RealWeatherService {
     }
 
     public static void tick(MinecraftServer server) {
-        if (!WinterConfig.ENABLED.get() || !WinterConfig.REAL_WEATHER_ENABLED.get()) {
+        if (!WinterConfig.isEnabled() || !WinterConfig.REAL_WEATHER_ENABLED.get()) {
             return;
         }
 

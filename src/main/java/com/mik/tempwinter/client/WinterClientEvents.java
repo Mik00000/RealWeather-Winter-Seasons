@@ -50,7 +50,7 @@ public final class WinterClientEvents {
     }
 
     private static void onClientTick(ClientTickEvent.Post event) {
-        if (!WinterConfig.ENABLED.get()) {
+        if (!WinterConfig.isEnabled()) {
             return;
         }
         Minecraft mc = Minecraft.getInstance();
@@ -169,7 +169,7 @@ public final class WinterClientEvents {
 
     private static void onLeftClickBlock(PlayerInteractEvent.LeftClickBlock event) {
         if (!event.getLevel().isClientSide() || !event.getLevel().dimension().equals(Level.OVERWORLD)
-                || !WinterConfig.ENABLED.get() || !WinterConfig.TREE_SHAKE_SNOW.get()
+                || !WinterConfig.isEnabled() || !WinterConfig.TREE_SHAKE_SNOW.get()
                 || ShaderAndModCompat.hasExternalWinterParticles()
                 || (WinterConfig.REAL_WEATHER_ENABLED.get() && ClientWeatherState.isExplicitlyDisabled())) {
             return;
@@ -209,7 +209,7 @@ public final class WinterClientEvents {
     }
 
     private static boolean shouldApplyWinterFog(ViewportEvent event) {
-        if (!WinterConfig.ENABLED.get() || !WinterConfig.WINTER_FOG.get()
+        if (!WinterConfig.isEnabled() || !WinterConfig.WINTER_FOG.get()
                 || (WinterConfig.REAL_WEATHER_ENABLED.get() && ClientWeatherState.isExplicitlyDisabled())
                 || ShaderAndModCompat.hasExternalFogMod() || ShaderAndModCompat.hasParticleRain()) {
             return false;
@@ -256,7 +256,7 @@ public final class WinterClientEvents {
     }
 
     private static void onDebugText(CustomizeGuiOverlayEvent.DebugText event) {
-        if (!WinterConfig.ENABLED.get() || !ClientWeatherState.isActive()) {
+        if (!WinterConfig.isEnabled() || !ClientWeatherState.isActive()) {
             return;
         }
         Minecraft mc = Minecraft.getInstance();

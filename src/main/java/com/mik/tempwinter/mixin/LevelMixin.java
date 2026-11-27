@@ -13,7 +13,7 @@ public class LevelMixin {
     @Inject(method = "getRainLevel(F)F", at = @At("RETURN"), cancellable = true, require = 0)
     private void tempwinter$scaleSnowfallDensity(float partialTick, CallbackInfoReturnable<Float> cir) {
         Level self = (Level) (Object) this;
-        if (!self.isClientSide || !self.dimension().equals(Level.OVERWORLD) || !WinterConfig.ENABLED.get()) {
+        if (!self.isClientSide || !self.dimension().equals(Level.OVERWORLD) || !WinterConfig.isEnabled()) {
             return;
         }
         if (WinterConfig.REAL_WEATHER_ENABLED.get() && ClientWeatherState.isActive()) {

@@ -251,4 +251,12 @@ public final class WinterConfig {
 
     private WinterConfig() {
     }
+
+    public static boolean isLoaded() {
+        return SPEC.isLoaded();
+    }
+
+    public static boolean isEnabled() {
+        return SPEC.isLoaded() && ENABLED.get();
+    }
 }

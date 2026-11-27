@@ -13,7 +13,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public class BiomeClientMixin {
     @Unique
     private static boolean tempwinter$canTintWinter() {
-        if (!WinterConfig.ENABLED.get() || !ClientWeatherState.isInOverworld()) {
+        if (!WinterConfig.isEnabled() || !ClientWeatherState.isInOverworld()) {
             return false;
         }
         if (!ClientWeatherState.hasReceivedSync()) {

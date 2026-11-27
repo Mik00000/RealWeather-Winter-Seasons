@@ -36,7 +36,7 @@ public class TempWinterJadePlugin implements IWailaPlugin {
             @Override
             public void appendTooltip(ITooltip tooltip, BlockAccessor accessor, IPluginConfig config) {
                 try {
-                    if (!WinterConfig.ENABLED.get() || !ClientWeatherState.isActive()
+                    if (!WinterConfig.isEnabled() || !ClientWeatherState.isActive()
                             || !accessor.getLevel().dimension().equals(Level.OVERWORLD)) {
                         return;
                     }
