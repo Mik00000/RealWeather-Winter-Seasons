@@ -1,6 +1,7 @@
 package com.mik.tempwinter;
 
 import com.mik.tempwinter.client.WinterClientEvents;
+import com.mik.tempwinter.compat.SableCompat;
 import com.mik.tempwinter.compat.SeasonCompat;
 import com.mik.tempwinter.compat.TemperatureModCompat;
 import com.mik.tempwinter.network.WinterWeatherPayload;
@@ -142,9 +143,11 @@ public class TempWinterMod {
         double effectiveTempC = RealWeatherService.getEffectiveTempC(RealWeatherService.getCurrentTempC(), player.getBlockY());
 
         if (WinterConfig.FROST_OVERLAY.get() && !TemperatureModCompat.hasExternalTemperatureMod() && player.tickCount % 10 == 0) {
+            int heatRadius = WinterConfig.HEAT_SOURCE_RADIUS.get() + 1;
             boolean freezingOutdoors = effectiveTempC <= WinterConfig.FROST_OVERLAY_TEMP_C.get()
                     && outdoors
-                    && !HeatSourceHelper.hasHeatNearby(level, player.blockPosition(), WinterConfig.HEAT_SOURCE_RADIUS.get() + 1)
+                    && !HeatSourceHelper.hasHeatNearby(level, player.blockPosition(), heatRadius)
+                    && !SableCompat.hasHeatOnNearbySubLevel(level, player.position(), heatRadius)
                     && countLeatherArmor(player) < 2;
             int currentFrozen = player.getTicksFrozen();
             if (freezingOutdoors) {
@@ -160,14 +163,15 @@ public class TempWinterMod {
 
         if (WinterConfig.FRAGILE_ICE.get() && effectiveTempC > WinterConfig.FRAGILE_ICE_MAX_TEMP_C.get()) {
             BlockPos below = player.blockPosition().below();
-            if (level.getBlockState(below).is(Blocks.ICE)
-                    && level.getBlockState(below.below()).is(Blocks.WATER)
-                    && !hasFrostWalker(level, player)) {
+            BlockPos icePos = (level.getBlockState(below).is(Blocks.ICE) && level.getBlockState(below.below()).is(Blocks.WATER))
+                    ? below
+                    : SableCompat.findBlockOnIntersectingShip(level, player.position(), false);
+            if (icePos != null && !hasFrostWalker(level, player)) {
                 float crackChance = player.fallDistance > 0.5F ? 0.55F : (player.isSprinting() ? 0.06F : 0.015F);
                 if (player.getRandom().nextFloat() < crackChance) {
-                    level.levelEvent(2001, below, Block.getId(Blocks.ICE.defaultBlockState()));
-                    level.setBlockAndUpdate(below, Blocks.WATER.defaultBlockState());
-                    level.playSound(null, below, SoundEvents.GLASS_BREAK, SoundSource.BLOCKS, 0.55F, 1.2F);
+                    level.levelEvent(2001, icePos, Block.getId(Blocks.ICE.defaultBlockState()));
+                    level.setBlockAndUpdate(icePos, Blocks.WATER.defaultBlockState());
+                    level.playSound(null, icePos, SoundEvents.GLASS_BREAK, SoundSource.BLOCKS, 0.55F, 1.2F);
                     return;
                 }
             }
@@ -184,7 +188,9 @@ public class TempWinterMod {
         BlockPos feet = player.blockPosition();
         BlockPos snowPos = level.getBlockState(feet).is(Blocks.SNOW)
                 ? feet
-                : (level.getBlockState(feet.below()).is(Blocks.SNOW) ? feet.below() : null);
+                : (level.getBlockState(feet.below()).is(Blocks.SNOW)
+                        ? feet.below()
+                        : SableCompat.findBlockOnIntersectingShip(level, player.position(), true));
         if (snowPos == null) {
             return;
         }

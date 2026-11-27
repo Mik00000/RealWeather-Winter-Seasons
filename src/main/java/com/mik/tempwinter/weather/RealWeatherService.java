@@ -309,20 +309,29 @@ public final class RealWeatherService {
     }
 
     public static boolean canFreezeWater() {
+        return canFreezeWater(64);
+    }
+
+    public static boolean canFreezeWater(int y) {
         if (!WinterConfig.REAL_WEATHER_ENABLED.get()) {
             return true;
         }
-        return currentTempC <= WinterConfig.FREEZE_TEMPERATURE_C.get();
+        return getEffectiveTempC(currentTempC, y) <= WinterConfig.FREEZE_TEMPERATURE_C.get();
     }
 
     public static boolean canPlaceSnowLayers() {
+        return canPlaceSnowLayers(64);
+    }
+
+    public static boolean canPlaceSnowLayers(int y) {
         if (!WinterConfig.REAL_WEATHER_ENABLED.get()) {
             return true;
         }
-        if (currentHasRainOnly || currentThunder) {
+        double effectiveTempC = getEffectiveTempC(currentTempC, y);
+        if ((currentHasRainOnly || currentThunder) && effectiveTempC > WinterConfig.WET_SNOW_MAX_TEMPERATURE_C.get()) {
             return false;
         }
-        return currentTempC <= WinterConfig.FREEZE_TEMPERATURE_C.get();
+        return effectiveTempC <= WinterConfig.FREEZE_TEMPERATURE_C.get();
     }
 
     public static void onServerStart(MinecraftServer server) {
