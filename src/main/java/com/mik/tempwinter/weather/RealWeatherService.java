@@ -10,6 +10,7 @@ import com.mik.tempwinter.network.WinterWeatherPayload;
 import com.mojang.logging.LogUtils;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.storage.LevelResource;
 import net.neoforged.neoforge.network.PacketDistributor;
 import org.slf4j.Logger;
 
@@ -19,6 +20,8 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -71,7 +74,14 @@ public final class RealWeatherService {
     private static volatile int resolvedUtcOffsetSeconds = ZoneId.systemDefault().getRules().getOffset(Instant.now()).getTotalSeconds();
     private static long ticksUntilNextFetch = 20L;
 
-    private record PendingUpdate(float intensity, double tempC, double windKmh, double snowDepthM, boolean rainOnly, boolean thunder, String summary) {
+    private static volatile Path stateFilePath = null;
+    private static volatile long lastSavedEpochSec = 0L;
+    private static volatile double lastSavedSnowDepthM = 0.0;
+    private static volatile boolean offlineThawChecked = false;
+    private static volatile double offlineThawPeakTempC = -99.0;
+    private static volatile long offlineThawUntilEpochSec = 0L;
+
+    private record PendingUpdate(float intensity, double tempC, double windKmh, double snowDepthM, boolean rainOnly, boolean thunder, boolean offlineThawDetected, double thawPeakTempC, String summary) {
     }
 
     private RealWeatherService() {
@@ -128,12 +138,66 @@ public final class RealWeatherService {
                 || !WinterConfig.SYNC_SNOW_DEPTH.get() || isVanillaWeatherMode() || shouldUseRain(y)) {
             return 0;
         }
-        double effectiveTempC = getEffectiveTempC(currentTempC, y);
-        if (currentSnowDepthM < 0.005 || effectiveTempC > WinterConfig.MELT_TEMPERATURE_C.get()) {
+        double baseLayers = getRealBaseLayersDouble(y);
+        if (baseLayers <= 0.05) {
             return 0;
         }
         int maxLayers = WinterConfig.MAX_SNOW_BLOCKS.get() * 8;
-        return Math.max(1, Math.min(maxLayers, (int) Math.round(currentSnowDepthM * 24.0)));
+        return Math.max(1, Math.min(maxLayers, (int) Math.round(baseLayers)));
+    }
+
+    private static double getRealBaseLayersDouble(int y) {
+        double effectiveTempC = getEffectiveTempC(currentTempC, y);
+        if (shouldUseRain(y) || effectiveTempC > WinterConfig.MELT_TEMPERATURE_C.get()) {
+            return 0.0;
+        }
+        double depthM = currentSnowDepthM;
+        double baseLayers = depthM * 26.0;
+        if (WinterConfig.ALTITUDE_COLD_ENABLED.get() && y > 120 && depthM >= 0.005) {
+            baseLayers += ((y - 120) / 32.0) * 0.5;
+        }
+        boolean activelySnowing = currentIntensity > 0.15F
+                && !currentHasRainOnly && !currentThunder
+                && effectiveTempC <= WinterConfig.FREEZE_TEMPERATURE_C.get();
+        if (activelySnowing && baseLayers < 2.0) {
+            baseLayers = 2.0;
+        }
+        return baseLayers;
+    }
+
+    /**
+     * Computes per-column target layers matched to real-world snow depth (roughly equal to IRL or slightly deeper in drifts).
+     */
+    public static int getColumnSnowCapLayers(int y, double localNoise01, int wallBonusLayers, int fallbackDriftLayers) {
+        int maxConfigLayers = WinterConfig.MAX_SNOW_BLOCKS.get() * 8;
+        if (!WinterConfig.REAL_WEATHER_ENABLED.get() || !WinterConfig.SYNC_SNOW_DEPTH.get() || isVanillaWeatherMode()) {
+            return Math.min(maxConfigLayers, fallbackDriftLayers + wallBonusLayers);
+        }
+        double baseLayers = getRealBaseLayersDouble(y);
+        if (baseLayers <= 0.05) {
+            return 0;
+        }
+        double varied = WinterConfig.UNEVEN_DRIFTS.get()
+                ? baseLayers * (0.60 + localNoise01 * 0.85)
+                : baseLayers;
+        int scaledWall = wallBonusLayers > 0
+                ? Math.min(wallBonusLayers, Math.max(1, (int) Math.ceil(baseLayers * 0.6)))
+                : 0;
+        if (currentSnowDepthM < 0.015 && currentIntensity <= 0.15F && varied < 0.5 && scaledWall == 0) {
+            return 0;
+        }
+        return Math.min(maxConfigLayers, Math.max(1, (int) Math.round(varied) + scaledWall));
+    }
+
+    public static boolean isOfflineThawActive() {
+        return offlineThawUntilEpochSec > 0L && Instant.now().getEpochSecond() < offlineThawUntilEpochSec;
+    }
+
+    public static boolean hasOfflineThawAt(int y) {
+        if (!isOfflineThawActive()) {
+            return false;
+        }
+        return getEffectiveTempC(offlineThawPeakTempC, y) > WinterConfig.MELT_TEMPERATURE_C.get();
     }
 
     public static void markColumnTrampled(int x, int z, long gameTime) {
@@ -230,8 +294,10 @@ public final class RealWeatherService {
             currentIntensity = 0.85F;
             currentTempC = -5.0;
             currentWindKmh = 25.0;
+            currentSnowDepthM = Math.max(currentSnowDepthM, 0.25);
             currentHasRainOnly = false;
             currentThunder = false;
+            offlineThawUntilEpochSec = 0L;
             server.overworld().setWeatherParameters(0, durationTicks, true, false);
         } else if (normalized.equals("rain")) {
             currentIntensity = 0.85F;
@@ -348,6 +414,13 @@ public final class RealWeatherService {
         overrideTicksRemaining = -1L;
         tickingOverworld = true;
         ticksUntilNextFetch = 20L;
+        offlineThawChecked = false;
+        offlineThawPeakTempC = -99.0;
+        offlineThawUntilEpochSec = 0L;
+        lastSavedEpochSec = 0L;
+        lastSavedSnowDepthM = 0.0;
+        stateFilePath = server.getWorldPath(LevelResource.ROOT).resolve("data").resolve("realweather_state.json");
+        loadWorldState();
         synchronized (TRAMPLED_COLUMNS) {
             TRAMPLED_COLUMNS.clear();
         }
@@ -358,6 +431,7 @@ public final class RealWeatherService {
     }
 
     public static void onServerStop() {
+        saveWorldState(Instant.now().getEpochSecond(), currentTempC, currentSnowDepthM, offlineThawPeakTempC, offlineThawUntilEpochSec);
         fetchInFlight = false;
         pendingUpdate = null;
     }
@@ -365,6 +439,15 @@ public final class RealWeatherService {
     public static void tick(MinecraftServer server) {
         if (!WinterConfig.isEnabled() || !WinterConfig.REAL_WEATHER_ENABLED.get()) {
             return;
+        }
+
+        if (server.getTickCount() > 0 && server.getTickCount() % 1200 == 0) {
+            long snapEpoch = Instant.now().getEpochSecond();
+            double snapTemp = currentTempC;
+            double snapDepth = currentSnowDepthM;
+            double snapPeak = offlineThawPeakTempC;
+            long snapUntil = offlineThawUntilEpochSec;
+            CompletableFuture.runAsync(() -> saveWorldState(snapEpoch, snapTemp, snapDepth, snapPeak, snapUntil));
         }
 
         if (overrideTicksRemaining > 0L && --overrideTicksRemaining <= 0L) {
@@ -406,6 +489,16 @@ public final class RealWeatherService {
         currentSnowDepthM = update.snowDepthM();
         currentHasRainOnly = update.rainOnly();
         currentThunder = update.thunder();
+
+        if (update.offlineThawDetected()) {
+            offlineThawPeakTempC = update.thawPeakTempC();
+            offlineThawUntilEpochSec = Instant.now().getEpochSecond() + 1800L;
+            LOGGER.info("[TempWinter] Offline thaw detected (peak {}C, current depth {}m) -> catching up snow cover.",
+                    String.format(Locale.ROOT, "%.1f", offlineThawPeakTempC),
+                    String.format(Locale.ROOT, "%.2f", currentSnowDepthM));
+        } else if (canPlaceSnowLayers() && currentIntensity > 0.25F) {
+            offlineThawUntilEpochSec = 0L;
+        }
 
         ServerLevel overworld = server.overworld();
         int durationTicks = WinterConfig.SYNC_INTERVAL_MINUTES.get() * 60 * 20 + 1200;
@@ -462,15 +555,28 @@ public final class RealWeatherService {
     private static PendingUpdate fetchFromOpenMeteo(float overcastFlurry, boolean windBoost) {
         try {
             int offsetHours = WinterConfig.WEATHER_TIME_OFFSET_HOURS.get();
-            String url = offsetHours == 0
-                    ? String.format(
-                            Locale.ROOT,
-                            "https://api.open-meteo.com/v1/forecast?latitude=%.4f&longitude=%.4f&current=temperature_2m,precipitation,rain,snowfall,snow_depth,cloud_cover,weather_code,wind_speed_10m&timezone=auto",
-                            resolvedLat, resolvedLon)
-                    : String.format(
-                            Locale.ROOT,
-                            "https://api.open-meteo.com/v1/forecast?latitude=%.4f&longitude=%.4f&current=temperature_2m&hourly=temperature_2m,precipitation,rain,snowfall,snow_depth,cloud_cover,weather_code,wind_speed_10m&past_days=1&forecast_days=2&timezone=auto",
-                            resolvedLat, resolvedLon);
+            long nowEpochSec = Instant.now().getEpochSecond();
+            long gapSec = (!offlineThawChecked && lastSavedEpochSec > 0L) ? Math.max(0L, nowEpochSec - lastSavedEpochSec) : 0L;
+            boolean checkOfflineThaw = (offsetHours == 0 && gapSec >= 900L);
+            int pastDays = checkOfflineThaw ? (int) Math.max(1L, Math.min(7L, (gapSec / 86400L) + 1L)) : 1;
+
+            String url;
+            if (offsetHours != 0) {
+                url = String.format(
+                        Locale.ROOT,
+                        "https://api.open-meteo.com/v1/forecast?latitude=%.4f&longitude=%.4f&current=temperature_2m&hourly=temperature_2m,precipitation,rain,snowfall,snow_depth,cloud_cover,weather_code,wind_speed_10m&past_days=1&forecast_days=2&timezone=auto",
+                        resolvedLat, resolvedLon);
+            } else if (checkOfflineThaw) {
+                url = String.format(
+                        Locale.ROOT,
+                        "https://api.open-meteo.com/v1/forecast?latitude=%.4f&longitude=%.4f&current=temperature_2m,precipitation,rain,snowfall,snow_depth,cloud_cover,weather_code,wind_speed_10m&hourly=temperature_2m,precipitation,snow_depth&past_days=%d&forecast_days=1&timezone=auto",
+                        resolvedLat, resolvedLon, pastDays);
+            } else {
+                url = String.format(
+                        Locale.ROOT,
+                        "https://api.open-meteo.com/v1/forecast?latitude=%.4f&longitude=%.4f&current=temperature_2m,precipitation,rain,snowfall,snow_depth,cloud_cover,weather_code,wind_speed_10m&timezone=auto",
+                        resolvedLat, resolvedLon);
+            }
             HttpRequest req = HttpRequest.newBuilder(URI.create(url))
                     .timeout(Duration.ofSeconds(10))
                     .header("User-Agent", "TempWinter-MC/1.0")
@@ -520,13 +626,26 @@ public final class RealWeatherService {
                 windKmh = cur.has("wind_speed_10m") ? cur.get("wind_speed_10m").getAsDouble() : 0.0;
             }
 
+            boolean offlineThawDetected = false;
+            double thawPeakTempC = tempC;
+            if (checkOfflineThaw && root.has("hourly")) {
+                offlineThawChecked = true;
+                double[] thawInfo = analyzeOfflineThaw(root.getAsJsonObject("hourly"), lastSavedEpochSec, nowEpochSec, snowDepthM, lastSavedSnowDepthM);
+                if (thawInfo != null) {
+                    offlineThawDetected = true;
+                    thawPeakTempC = thawInfo[0];
+                }
+            } else if (!offlineThawChecked) {
+                offlineThawChecked = true;
+            }
+
             boolean thunder = (wmo == 95 || wmo == 96 || wmo == 99);
             boolean drizzleOrFlurryWmo = (wmo >= 51 && wmo <= 57) || wmo == 77 || wmo == 85 || wmo == 86;
             float intensity = computeIntensity(precip, snow, clouds, windKmh, thunder, drizzleOrFlurryWmo, overcastFlurry, windBoost);
             boolean rainOnly = (rain > 0.0 || (wmo >= 51 && wmo <= 67) || (wmo >= 80 && wmo <= 82)) && snow <= 0.0 && wmo != 77 && wmo != 85 && wmo != 86;
             String label = String.format(Locale.ROOT, "%s [open-meteo%s] wmo=%d precip=%.2f rain=%.2f snow=%.2f depth=%.2fm wind=%.1fkm/h clouds=%d%%",
                     resolvedLabel, offsetHours != 0 ? String.format(Locale.ROOT, " %+dh", offsetHours) : "", wmo, precip, rain, snow, snowDepthM, windKmh, clouds);
-            return new PendingUpdate(intensity, tempC, windKmh, snowDepthM, rainOnly, thunder, label);
+            return new PendingUpdate(intensity, tempC, windKmh, snowDepthM, rainOnly, thunder, offlineThawDetected, thawPeakTempC, label);
         } catch (Exception e) {
             LOGGER.warn("[TempWinter] Open-Meteo failed ({}), trying fallback API", e.getMessage());
             return null;
@@ -592,7 +711,7 @@ public final class RealWeatherService {
             boolean rainOnly = isRainCode && !isSnowCode;
             String label = String.format(Locale.ROOT, "%s [wttr.in] code=%d precip=%.2f wind=%.1fkm/h clouds=%d%%",
                     resolvedLabel, code, precip, windKmh, clouds);
-            return new PendingUpdate(intensity, tempC, windKmh, isSnowCode ? Math.max(0.02, precip * 0.01) : 0.0, rainOnly, thunder, label);
+            return new PendingUpdate(intensity, tempC, windKmh, isSnowCode ? Math.max(0.02, precip * 0.01) : 0.0, rainOnly, thunder, false, tempC, label);
         } catch (Exception e) {
             LOGGER.warn("[TempWinter] Fallback wttr.in failed: {}", e.getMessage());
             return null;
@@ -690,5 +809,114 @@ public final class RealWeatherService {
             return (float) Math.min(1.0, overcastFlurry + windBonus * 0.5);
         }
         return 0.0F;
+    }
+
+    private static double[] analyzeOfflineThaw(
+            JsonObject hourly,
+            long fromEpochSec,
+            long toEpochSec,
+            double currentDepthM,
+            double prevSavedDepthM
+    ) {
+        if (hourly == null || !hourly.has("time")) {
+            return null;
+        }
+        JsonArray times = hourly.getAsJsonArray("time");
+        if (times == null || times.isEmpty()) {
+            return null;
+        }
+        ZoneOffset offset = ZoneOffset.ofTotalSeconds(resolvedUtcOffsetSeconds);
+        double meltTemp = WinterConfig.MELT_TEMPERATURE_C.get();
+        double freezeTemp = WinterConfig.FREEZE_TEMPERATURE_C.get();
+        double peakTemp = -99.0;
+        double degreeHours = 0.0;
+        double maxOfflineDepth = prevSavedDepthM;
+
+        for (int i = 0; i < times.size(); i++) {
+            String ts = times.get(i).getAsString();
+            long hourEpoch;
+            try {
+                hourEpoch = LocalDateTime.parse(ts).toEpochSecond(offset);
+            } catch (Exception ignored) {
+                continue;
+            }
+            if (hourEpoch < fromEpochSec - 1800L || hourEpoch > toEpochSec) {
+                continue;
+            }
+            double hTemp = getArrDouble(hourly, "temperature_2m", i, -10.0);
+            double hPrecip = getArrDouble(hourly, "precipitation", i, 0.0);
+            double hDepth = getArrDouble(hourly, "snow_depth", i, currentDepthM);
+            if (hTemp > peakTemp) {
+                peakTemp = hTemp;
+            }
+            if (hDepth > maxOfflineDepth) {
+                maxOfflineDepth = hDepth;
+            }
+            if (hTemp > meltTemp) {
+                degreeHours += (hTemp - meltTemp) + (hPrecip > 0.2 ? 1.5 : 0.0);
+            } else if (hPrecip > 0.2 && hTemp > freezeTemp) {
+                degreeHours += 1.0;
+            }
+        }
+        boolean snowReduced = currentDepthM < 0.005 || currentDepthM + 0.02 < maxOfflineDepth;
+        if (degreeHours >= 1.2 && snowReduced && peakTemp > meltTemp) {
+            return new double[]{peakTemp, degreeHours};
+        }
+        return null;
+    }
+
+    private static void loadWorldState() {
+        Path file = stateFilePath;
+        if (file == null || !Files.isRegularFile(file)) {
+            return;
+        }
+        try {
+            String raw = Files.readString(file, StandardCharsets.UTF_8);
+            JsonObject obj = GSON.fromJson(raw, JsonObject.class);
+            if (obj == null) {
+                return;
+            }
+            if (obj.has("lastSeenEpochSec")) {
+                lastSavedEpochSec = obj.get("lastSeenEpochSec").getAsLong();
+            }
+            if (obj.has("lastSnowDepthM")) {
+                lastSavedSnowDepthM = obj.get("lastSnowDepthM").getAsDouble();
+            }
+            long now = Instant.now().getEpochSecond();
+            if (obj.has("offlineThawUntilEpochSec") && obj.has("offlineThawPeakTempC")) {
+                long until = obj.get("offlineThawUntilEpochSec").getAsLong();
+                if (until > now) {
+                    offlineThawUntilEpochSec = until;
+                    offlineThawPeakTempC = obj.get("offlineThawPeakTempC").getAsDouble();
+                }
+            }
+        } catch (Exception e) {
+            LOGGER.warn("[TempWinter] Could not read world state: {}", e.getMessage());
+        }
+    }
+
+    private static synchronized void saveWorldState(
+            long epochSec,
+            double tempC,
+            double snowDepthM,
+            double thawPeakTempC,
+            long thawUntilEpochSec
+    ) {
+        Path file = stateFilePath;
+        if (file == null) {
+            return;
+        }
+        try {
+            Files.createDirectories(file.getParent());
+            JsonObject obj = new JsonObject();
+            obj.addProperty("lastSeenEpochSec", epochSec);
+            obj.addProperty("lastTempC", tempC);
+            obj.addProperty("lastSnowDepthM", snowDepthM);
+            obj.addProperty("offlineThawPeakTempC", thawPeakTempC);
+            obj.addProperty("offlineThawUntilEpochSec", thawUntilEpochSec);
+            Files.writeString(file, GSON.toJson(obj), StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            LOGGER.warn("[TempWinter] Could not save world state: {}", e.getMessage());
+        }
     }
 }

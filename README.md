@@ -21,7 +21,7 @@ Download ready-to-play `.jar` builds from the **[Releases](../../releases/latest
 
 ## Features
 
-- **Real-World Weather & Ground Snow Sync:** Polls **Open-Meteo** (including real `snow_depth`, with automatic **wttr.in** fallback) using a city name or dynamic `auto` IP geolocation (`https://ipapi.co/json/` + fallback). Even if the server was offline during an overnight snowfall or you enter newly loaded chunks, ground snow layers blanket up to the real `snow_depth`.
+- **Real-World Weather, Snow Depth & Offline Thaw Sync:** Polls **Open-Meteo** (with automatic **wttr.in** fallback) using a city name or dynamic `auto` IP geolocation (`http://ip-api.com/json/` + `ipapi.co` fallback). Ground snow and snowfall buildup scale directly from Open-Meteo `snow_depth` (with natural `0.60x–1.45x` drift variation so in-game snow matches outside), blanket newly visited chunks after offline snowfall, and check missed hourly history (`past_days`) when restarting so overnight thaws (`> meltTemperatureC`) still clear old snow even if it freezes again by morning.
 - **3-State Precipitation & Smart Melt Threshold:**
   - `<= 0.0°C`: Snowfall, uneven snowdrifts (up to `3` blocks / 24 layers via smooth 2D noise), and water freezing.
   - `0.0°C .. 1.5°C` (`meltTemperatureC`): Wet snow in air; existing ground snow holds steady without melting prematurely.

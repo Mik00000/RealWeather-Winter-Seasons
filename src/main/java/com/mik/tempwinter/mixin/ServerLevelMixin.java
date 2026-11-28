@@ -153,9 +153,25 @@ public class ServerLevelMixin {
         if (WinterConfig.HEAT_MELTS_SNOW.get() && HeatSourceHelper.hasHeatNearby(self, top, WinterConfig.HEAT_SOURCE_RADIUS.get())) {
             return 0;
         }
-        int capLayers = WinterConfig.UNEVEN_DRIFTS.get()
-                ? tempwinter$localDriftCapLayers(top.getX(), top.getZ(), maxBlocks)
+        double noise01 = tempwinter$localDriftNoise01(top.getX(), top.getZ());
+        int fallbackDrift = WinterConfig.UNEVEN_DRIFTS.get()
+                ? tempwinter$localDriftCapLayers(noise01, maxBlocks)
                 : maxBlocks * 8;
+        int wallBonus = 0;
+        if (WinterConfig.WALL_DRIFT_BONUS.get()) {
+            for (Direction dir : Direction.Plane.HORIZONTAL) {
+                BlockState adj = self.getBlockState(top.relative(dir));
+                if (adj.isSolid() && !adj.is(Blocks.SNOW) && !adj.is(Blocks.SNOW_BLOCK) && !adj.is(BlockTags.DOORS)) {
+                    wallBonus = 4;
+                    break;
+                }
+            }
+        }
+        int worldY = SableCompat.getEffectiveWorldY(self, top);
+        int capLayers = RealWeatherService.getColumnSnowCapLayers(worldY, noise01, wallBonus, fallbackDrift);
+        if (capLayers <= 0) {
+            return 0;
+        }
         if (WinterConfig.REDUCE_PATH_SNOW.get() && (ground.is(Blocks.DIRT_PATH)
                 || ground.is(Blocks.GRAVEL)
                 || ground.is(Blocks.COBBLESTONE)
@@ -163,15 +179,6 @@ public class ServerLevelMixin {
                 || ground.is(Blocks.MOSSY_COBBLESTONE)
                 || ground.is(Blocks.SMOOTH_STONE))) {
             return Math.min(capLayers, 3);
-        }
-        if (WinterConfig.WALL_DRIFT_BONUS.get()) {
-            for (Direction dir : Direction.Plane.HORIZONTAL) {
-                BlockState adj = self.getBlockState(top.relative(dir));
-                if (adj.isSolid() && !adj.is(Blocks.SNOW) && !adj.is(Blocks.SNOW_BLOCK) && !adj.is(BlockTags.DOORS)) {
-                    capLayers = Math.min(maxBlocks * 8, capLayers + 4);
-                    break;
-                }
-            }
         }
         return capLayers;
     }
@@ -217,13 +224,16 @@ public class ServerLevelMixin {
 
         boolean warmMelt = RealWeatherService.canMeltSnow();
         boolean heatMelt = WinterConfig.HEAT_MELTS_SNOW.get();
-        if (!warmMelt && !heatMelt) {
+        boolean offlineThaw = RealWeatherService.isOfflineThawActive();
+        if (!warmMelt && !heatMelt && !offlineThaw) {
             return;
         }
         float meltChance;
         if (warmMelt) {
             double excessC = RealWeatherService.getCurrentTempC() - WinterConfig.MELT_TEMPERATURE_C.get();
             meltChance = (float) Math.min(0.25, 0.02 + Math.max(0.0, excessC) * 0.015 + (RealWeatherService.shouldUseRain() ? 0.08 : 0.0));
+        } else if (offlineThaw) {
+            meltChance = 0.15F;
         } else {
             meltChance = 0.08F;
         }
@@ -236,8 +246,9 @@ public class ServerLevelMixin {
         BlockPos top = self.getHeightmapPos(Heightmap.Types.MOTION_BLOCKING, new BlockPos(x, 0, z));
         int worldY = SableCompat.getEffectiveWorldY(self, top);
         boolean warmMeltAtTop = RealWeatherService.canMeltSnow(worldY);
+        boolean offlineThawAtTop = RealWeatherService.hasOfflineThawAt(worldY);
         boolean nearHeat = heatMelt && HeatSourceHelper.hasHeatNearby(self, top, WinterConfig.HEAT_SOURCE_RADIUS.get());
-        if (!warmMeltAtTop && !nearHeat) {
+        if (!warmMeltAtTop && !nearHeat && !offlineThawAtTop) {
             return;
         }
 
@@ -260,20 +271,28 @@ public class ServerLevelMixin {
             int layers = state.getValue(SnowLayerBlock.LAYERS);
             int snowWorldY = SableCompat.getEffectiveWorldY(self, snowPos);
             boolean canWarmMeltHere = RealWeatherService.canMeltSnow(snowWorldY);
+            boolean offlineThawSnow = RealWeatherService.hasOfflineThawAt(snowWorldY);
             boolean nearHeatSnow = heatMelt && HeatSourceHelper.hasHeatNearby(self, snowPos, WinterConfig.HEAT_SOURCE_RADIUS.get());
-            if (!canWarmMeltHere && !nearHeatSnow) {
+            if (!canWarmMeltHere && !nearHeatSnow && !offlineThawSnow) {
                 return;
             }
             double effectiveTempC = RealWeatherService.getEffectiveTempC(RealWeatherService.getCurrentTempC(), snowWorldY);
-            if (!nearHeatSnow && !RealWeatherService.shouldUseRain(snowWorldY) && effectiveTempC <= WinterConfig.MELT_TEMPERATURE_C.get() + 1.0) {
-                int floor = RealWeatherService.getSnowDepthTargetLayers(snowWorldY);
+            boolean keepDepthFloor = !nearHeatSnow && ((offlineThawSnow && !canWarmMeltHere)
+                    || (!RealWeatherService.shouldUseRain(snowWorldY) && effectiveTempC <= WinterConfig.MELT_TEMPERATURE_C.get() + 1.0));
+            if (keepDepthFloor) {
+                int floor = RealWeatherService.getColumnSnowCapLayers(
+                        snowWorldY,
+                        tempwinter$localDriftNoise01(snowPos.getX(), snowPos.getZ()),
+                        0,
+                        0
+                );
                 int snowBelow = 0;
                 BlockPos cursor = snowPos.below();
                 while (snowBelow < WinterConfig.MAX_SNOW_BLOCKS.get() && self.getBlockState(cursor).is(Blocks.SNOW)) {
                     snowBelow++;
                     cursor = cursor.below();
                 }
-                if (snowBelow * 8 + layers <= floor && self.canSeeSky(snowPos)) {
+                if (snowBelow * 8 + layers <= floor && (self.canSeeSky(snowPos) || floor > 0)) {
                     return;
                 }
             }
@@ -286,7 +305,8 @@ public class ServerLevelMixin {
         }
 
         BlockPos icePos = top.below();
-        if (self.getBlockState(icePos).is(Blocks.ICE) && self.canSeeSky(top)) {
+        if (self.getBlockState(icePos).is(Blocks.ICE) && self.canSeeSky(top)
+                && (warmMeltAtTop || nearHeat || (offlineThawAtTop && RealWeatherService.getSnowDepthTargetLayers(worldY) == 0))) {
             self.setBlockAndUpdate(icePos, Blocks.WATER.defaultBlockState());
         }
     }
@@ -344,8 +364,7 @@ public class ServerLevelMixin {
                 snowBelow++;
                 cursor = cursor.below();
             }
-            int capLayers = tempwinter$computeColumnCapLayers(self, placePos, self.getBlockState(cursor), maxBlocks);
-            int goal = Math.min(capLayers, snowDepthTarget);
+            int goal = tempwinter$computeColumnCapLayers(self, placePos, self.getBlockState(cursor), maxBlocks);
             if (goal <= 0) {
                 continue;
             }
@@ -520,13 +539,17 @@ public class ServerLevelMixin {
     }
 
     @Unique
-    private static int tempwinter$localDriftCapLayers(int x, int z, int maxBlocks) {
-        int maxLayers = maxBlocks * 8;
-        int minLayers = Math.min(maxLayers, Math.max(3, maxLayers / 6));
+    private static double tempwinter$localDriftNoise01(int x, int z) {
         double broad = tempwinter$smoothNoise(x / 8.0, z / 8.0);
         double medium = tempwinter$smoothNoise(x / 3.5 + 31.7, z / 3.5 - 19.3);
         double fine = tempwinter$hash01(x, z);
-        double t = Math.max(0.0, Math.min(1.0, broad * 0.70 + medium * 0.22 + fine * 0.08));
+        return Math.max(0.0, Math.min(1.0, broad * 0.70 + medium * 0.22 + fine * 0.08));
+    }
+
+    @Unique
+    private static int tempwinter$localDriftCapLayers(double t, int maxBlocks) {
+        int maxLayers = maxBlocks * 8;
+        int minLayers = Math.min(maxLayers, Math.max(3, maxLayers / 6));
         return minLayers + (int) Math.round(t * (maxLayers - minLayers));
     }
 
