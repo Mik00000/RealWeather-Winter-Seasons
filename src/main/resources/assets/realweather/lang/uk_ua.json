@@ -9,5 +9,6 @@
   "realweather.jade.snow_freezing": "Темп.: %s°C (Замерзає)",
   "realweather.jade.snow_melting": "Темп.: %s°C (Тане)",
   "realweather.jade.ice_fragile": "Крихкий лід (може тріснути)",
-  "realweather.jade.ice_solid": "Міцний лід (%s°C)"
+  "realweather.jade.ice_solid": "Міцний лід (%s°C)",
+  "realweather.sleep.realtime_active": "[RealWeather] Ви відпочили! Увімкнено реальний час доби, тому ніч не пропускається."
 }

@@ -9,5 +9,6 @@
   "realweather.jade.snow_freezing": "Temp: %s°C (Freezing)",
   "realweather.jade.snow_melting": "Temp: %s°C (Melting)",
   "realweather.jade.ice_fragile": "Fragile Ice (may crack)",
-  "realweather.jade.ice_solid": "Solid Ice (%s°C)"
+  "realweather.jade.ice_solid": "Solid Ice (%s°C)",
+  "realweather.sleep.realtime_active": "[RealWeather] Rested! Real-time clock is active, so night is not skipped."
 }

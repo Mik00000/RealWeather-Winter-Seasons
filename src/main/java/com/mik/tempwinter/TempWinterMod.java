@@ -15,6 +15,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
@@ -41,6 +42,7 @@ import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
+import net.neoforged.neoforge.event.level.SleepFinishedTimeEvent;
 import net.neoforged.neoforge.event.server.ServerStartingEvent;
 import net.neoforged.neoforge.event.server.ServerStoppingEvent;
 import net.neoforged.neoforge.event.tick.LevelTickEvent;
@@ -68,6 +70,7 @@ public class TempWinterMod {
         NeoForge.EVENT_BUS.addListener(this::onLevelTickPost);
         NeoForge.EVENT_BUS.addListener(this::onPlayerTick);
         NeoForge.EVENT_BUS.addListener(this::onPlayerLogin);
+        NeoForge.EVENT_BUS.addListener(this::onSleepFinishedTime);
         NeoForge.EVENT_BUS.addListener(this::onRightClickBlock);
         NeoForge.EVENT_BUS.addListener(this::onRegisterCommands);
         if (FMLEnvironment.dist == Dist.CLIENT) {
@@ -96,6 +99,9 @@ public class TempWinterMod {
 
     private void onServerTick(ServerTickEvent.Post event) {
         RealWeatherService.tick(event.getServer());
+        if (WinterConfig.isEnabled() && WinterConfig.FRICTION_MELTS_SNOW.get() && event.getServer().getTickCount() % 2 == 0) {
+            SableCompat.tickFrictionSnowMelt(event.getServer().overworld());
+        }
     }
 
     private void onLevelTickPre(LevelTickEvent.Pre event) {
@@ -123,6 +129,25 @@ public class TempWinterMod {
                             !RealWeatherService.isVanillaWeatherMode() && SeasonCompat.isWinterActive(player.level())
                     )
             );
+        }
+    }
+
+    private void onSleepFinishedTime(SleepFinishedTimeEvent event) {
+        if (!(event.getLevel() instanceof ServerLevel level)
+                || !level.dimension().equals(Level.OVERWORLD)
+                || !WinterConfig.isEnabled()
+                || !WinterConfig.REAL_WEATHER_ENABLED.get()
+                || !WinterConfig.SYNC_REAL_TIME.get()
+                || RealWeatherService.isVanillaWeatherMode()) {
+            return;
+        }
+        // Keep the real-world clock steady when players sleep instead of jumping to morning and snapping back.
+        event.setTimeAddition(level.getDayTime());
+        Component msg = Component.translatable("realweather.sleep.realtime_active");
+        for (ServerPlayer player : level.players()) {
+            if (player.isSleeping()) {
+                player.displayClientMessage(msg, true);
+            }
         }
     }
 

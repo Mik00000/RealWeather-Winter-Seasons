@@ -31,6 +31,7 @@ public final class WinterConfig {
     public static final ModConfigSpec.BooleanValue MELT_WHEN_WARM;
     public static final ModConfigSpec.BooleanValue REDUCE_PATH_SNOW;
     public static final ModConfigSpec.BooleanValue TRAMPLE_SNOW;
+    public static final ModConfigSpec.BooleanValue FRICTION_MELTS_SNOW;
     public static final ModConfigSpec.BooleanValue HEAT_MELTS_SNOW;
     public static final ModConfigSpec.IntValue HEAT_SOURCE_RADIUS;
     public static final ModConfigSpec.BooleanValue FRAGILE_ICE;
@@ -40,6 +41,7 @@ public final class WinterConfig {
     public static final ModConfigSpec.BooleanValue SMOOTH_DRIFTS;
     public static final ModConfigSpec.BooleanValue WALL_DRIFT_BONUS;
     public static final ModConfigSpec.BooleanValue UNDER_TREE_SNOW;
+    public static final ModConfigSpec.BooleanValue WIND_BLOWN_UNDER_ROOFS;
     public static final ModConfigSpec.BooleanValue SCOOP_SNOWBALLS;
     public static final ModConfigSpec.BooleanValue OVERHANG_SNOW_DRIP;
     public static final ModConfigSpec.DoubleValue BLIZZARD_WIND_THRESHOLD_KMH;
@@ -134,6 +136,9 @@ public final class WinterConfig {
         TRAMPLE_SNOW = builder
                 .comment("Compress multi-layer snow down by 1 layer when players walk on it (leaves at least 1 layer).")
                 .define("trampleSnow", true);
+        FRICTION_MELTS_SNOW = builder
+                .comment("Melt snow layers when moving Sable contraptions, Aeronautics wheels, or Tracks scrape/roll over them.")
+                .define("frictionMeltsSnow", true);
         HEAT_MELTS_SNOW = builder
                 .comment("Prevent deep snow buildup and gently melt snow/ice near vanilla and modded heat sources.")
                 .define("heatMeltsSnow", true);
@@ -161,6 +166,9 @@ public final class WinterConfig {
         UNDER_TREE_SNOW = builder
                 .comment("Let snow settle lightly (1-2 layers) on ground beneath tree leaves.")
                 .define("underTreeSnow", true);
+        WIND_BLOWN_UNDER_ROOFS = builder
+                .comment("Blow chaotic light snow (1-2 layers) up to 1-2 blocks beneath open-sided roofs and overhangs during windy weather.")
+                .define("windBlownUnderRoofs", true);
         SCOOP_SNOWBALLS = builder
                 .comment("Right-click snow layers with an empty main hand to scoop a snowball and lower the layer by 1.")
                 .define("scoopSnowballs", true);
