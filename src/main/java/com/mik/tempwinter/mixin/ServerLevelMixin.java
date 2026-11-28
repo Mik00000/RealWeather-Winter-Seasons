@@ -99,28 +99,30 @@ public class ServerLevelMixin {
                 return 0;
             }
         }
+        BlockPos below = top.below();
+        BlockState belowState = self.getBlockState(below);
+        BlockPos placePos = (belowState.is(Blocks.SNOW) && belowState.getValue(SnowLayerBlock.LAYERS) < 8)
+                ? below
+                : top;
         int maxBlocks = WinterConfig.MAX_SNOW_BLOCKS.get();
         int snowBelow = 0;
-        BlockPos cursor = top.below();
+        BlockPos cursor = placePos.below();
         while (snowBelow < maxBlocks && self.getBlockState(cursor).is(Blocks.SNOW)) {
             snowBelow++;
             cursor = cursor.below();
         }
-        int capLayers = tempwinter$computeColumnCapLayers(self, top, self.getBlockState(cursor), maxBlocks);
+        int capLayers = tempwinter$computeColumnCapLayers(self, placePos, self.getBlockState(cursor), maxBlocks);
         if (capLayers <= 0) {
             return 0;
         }
-        int curLayers = self.getBlockState(top).is(Blocks.SNOW)
-                ? self.getBlockState(top).getValue(SnowLayerBlock.LAYERS)
-                : (self.getBlockState(top.below()).is(Blocks.SNOW) ? self.getBlockState(top.below()).getValue(SnowLayerBlock.LAYERS) : 0);
+        BlockState atPlace = self.getBlockState(placePos);
+        int curLayers = atPlace.is(Blocks.SNOW) ? atPlace.getValue(SnowLayerBlock.LAYERS) : 0;
         if (snowBelow * 8 + curLayers >= capLayers) {
             return 0;
         }
-        if (WinterConfig.SMOOTH_DRIFTS.get() && (snowBelow > 0 || curLayers >= 3)) {
-            BlockPos checkPos = self.getBlockState(top.below()).is(Blocks.SNOW) && self.getBlockState(top.below()).getValue(SnowLayerBlock.LAYERS) < 8 ? top.below() : top;
-            if (tempwinter$shouldWaitForNeighbors(self, checkPos, curLayers, snowBelow)) {
-                return 0;
-            }
+        if (WinterConfig.SMOOTH_DRIFTS.get() && (snowBelow > 0 || curLayers >= 3)
+                && tempwinter$shouldWaitForNeighbors(self, placePos, curLayers)) {
+            return 0;
         }
         int remaining = capLayers - snowBelow * 8;
         if (remaining <= 0) {
@@ -175,7 +177,7 @@ public class ServerLevelMixin {
     }
 
     @Unique
-    private static boolean tempwinter$shouldWaitForNeighbors(ServerLevel self, BlockPos pos, int curLayers, int snowBelow) {
+    private static boolean tempwinter$shouldWaitForNeighbors(ServerLevel self, BlockPos pos, int curLayers) {
         int myHeight = pos.getY() * 8 + curLayers;
         for (Direction dir : Direction.Plane.HORIZONTAL) {
             BlockPos nCol = pos.relative(dir);
@@ -196,7 +198,7 @@ public class ServerLevelMixin {
                 continue;
             }
             int nHeight = nSnow.getY() * 8 + nLayers;
-            if (myHeight - nHeight > 3) {
+            if (myHeight - nHeight > 4) {
                 return true;
             }
         }
@@ -354,7 +356,7 @@ public class ServerLevelMixin {
                 continue;
             }
             if (WinterConfig.SMOOTH_DRIFTS.get() && (snowBelow > 0 || curLayers >= 3)
-                    && tempwinter$shouldWaitForNeighbors(self, placePos, curLayers, snowBelow)) {
+                    && tempwinter$shouldWaitForNeighbors(self, placePos, curLayers)) {
                 continue;
             }
             if (curLayers == 0) {
@@ -520,10 +522,11 @@ public class ServerLevelMixin {
     @Unique
     private static int tempwinter$localDriftCapLayers(int x, int z, int maxBlocks) {
         int maxLayers = maxBlocks * 8;
-        int minLayers = Math.max(4, maxLayers / 2);
-        double n = tempwinter$smoothNoise(x / 6.0, z / 6.0);
-        double fine = tempwinter$hash01(x, z) * 0.12;
-        double t = Math.max(0.0, Math.min(1.0, n * 0.88 + fine));
+        int minLayers = Math.min(maxLayers, Math.max(3, maxLayers / 6));
+        double broad = tempwinter$smoothNoise(x / 8.0, z / 8.0);
+        double medium = tempwinter$smoothNoise(x / 3.5 + 31.7, z / 3.5 - 19.3);
+        double fine = tempwinter$hash01(x, z);
+        double t = Math.max(0.0, Math.min(1.0, broad * 0.70 + medium * 0.22 + fine * 0.08));
         return minLayers + (int) Math.round(t * (maxLayers - minLayers));
     }
 
